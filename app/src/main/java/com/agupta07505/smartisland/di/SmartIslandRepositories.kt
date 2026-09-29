@@ -8,6 +8,7 @@
 package com.agupta07505.smartisland.di
 
 import android.content.Context
+import com.agupta07505.smartisland.data.FitnessRepository
 import com.agupta07505.smartisland.data.INotificationHistoryRepository
 import com.agupta07505.smartisland.data.INotificationRepository
 import com.agupta07505.smartisland.data.SmartIslandSettingsRepository
@@ -22,6 +23,7 @@ interface SmartIslandRepositoriesEntryPoint {
     fun settingsRepository(): SmartIslandSettingsRepository
     fun notificationRepository(): INotificationRepository
     fun notificationHistoryRepository(): INotificationHistoryRepository
+    fun fitnessRepository(): FitnessRepository
 }
 
 object SmartIslandRepositories {
@@ -33,6 +35,9 @@ object SmartIslandRepositories {
 
     fun historyRepository(context: Context): INotificationHistoryRepository =
         entryPoint(context).notificationHistoryRepository()
+
+    fun fitnessRepository(context: Context): FitnessRepository =
+        entryPoint(context).fitnessRepository()
 
     private fun entryPoint(context: Context): SmartIslandRepositoriesEntryPoint =
         EntryPointAccessors.fromApplication(

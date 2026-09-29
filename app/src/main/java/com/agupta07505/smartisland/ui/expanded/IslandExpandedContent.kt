@@ -24,6 +24,13 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -149,6 +156,7 @@ fun IslandExpandedContent(
                 IslandMode.ScreenRecording -> height.coerceIn(72.dp, 130.dp)
                 IslandMode.Timer -> height.coerceIn(72.dp, 130.dp)
                 IslandMode.Stopwatch -> height.coerceIn(72.dp, 130.dp)
+                IslandMode.Fitness -> height.coerceIn(80.dp, 220.dp)
                 else -> height.coerceIn(80.dp, 160.dp)
             }
         }
@@ -294,6 +302,12 @@ fun IslandExpandedContent(
                                 onCollapse = onCollapse,
                                 settings = settings
                             )
+                            IslandMode.Fitness -> FitnessExpanded(
+                                notification = notification,
+                                bottomPadding = bottomPadding,
+                                onCollapse = onCollapse,
+                                settings = settings
+                            )
                             IslandMode.Empty -> EmptyExpanded(
                                 settings = settings,
                                 apps = launcherApps,
@@ -321,6 +335,56 @@ private fun EmptyExpanded(
             .padding(start = 18.dp, top = 16.dp, end = 18.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.Center
     ) {
+        // 网易云音乐每日推荐快捷卡片
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFFE11D48).copy(alpha = 0.22f))
+                .clickable {
+                    com.agupta07505.smartisland.ui.playNeteaseDailyRecommend(context)
+                }
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFE11D48)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.MusicNote,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "网易云音乐 · 每日推荐",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "轻触直接播放今日推荐歌曲",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 11.sp
+                )
+            }
+            Icon(
+                imageVector = Icons.Rounded.PlayArrow,
+                contentDescription = "Play",
+                tint = Color(0xFFFB7185),
+                modifier = Modifier.size(26.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         val loadedApps = apps
         val hasConfiguration = settings.shortcutPackages.isNotEmpty() || settings.showRecentApps
 

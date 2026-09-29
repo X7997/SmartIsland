@@ -69,6 +69,8 @@ fun PermissionsSection(
     overlayGranted: Boolean,
     notificationGranted: Boolean,
     batteryIgnored: Boolean = false,
+    accessibilityGranted: Boolean = false,
+    onAccessibilityClick: () -> Unit = {},
     onOverlayClick: () -> Unit,
     onNotificationClick: () -> Unit,
     onBatteryClick: () -> Unit,
@@ -197,16 +199,25 @@ fun PermissionsSection(
             }
         }
 
-        // Required Permission 1: Accessibility
+        // Required Permission 1: Accessibility Service (2400 Topmost Layer & Zero Status Bar Block)
         PermissionCard(
-            title = stringResource(R.string.perm_accessibility_title),
-            description = stringResource(R.string.perm_accessibility_desc),
+            title = stringResource(R.string.perm_accessibility_service_title),
+            description = stringResource(R.string.perm_accessibility_service_desc),
+            granted = accessibilityGranted,
+            buttonText = stringResource(R.string.btn_grant),
+            onClick = onAccessibilityClick
+        )
+
+        // Required Permission 2: Display Over Other Apps (Overlay)
+        PermissionCard(
+            title = stringResource(R.string.perm_overlay_title),
+            description = stringResource(R.string.perm_overlay_desc),
             granted = overlayGranted,
             buttonText = stringResource(R.string.btn_grant),
             onClick = onOverlayClick
         )
 
-        // Required Permission 2: Notification Listener
+        // Required Permission 3: Notification Listener
         PermissionCard(
             title = stringResource(R.string.perm_notification_title),
             description = stringResource(R.string.perm_notification_desc),
@@ -215,7 +226,7 @@ fun PermissionsSection(
             onClick = onNotificationClick
         )
 
-        // Recommended Permission 3: Battery Optimization
+        // Recommended Permission 4: Battery Optimization
         PermissionCard(
             title = stringResource(R.string.perm_battery_title),
             description = stringResource(R.string.perm_battery_desc),

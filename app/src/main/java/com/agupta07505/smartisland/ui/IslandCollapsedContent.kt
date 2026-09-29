@@ -22,11 +22,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,18 +49,33 @@ import androidx.compose.material.icons.rounded.AvTimer
 import androidx.compose.material.icons.rounded.BluetoothConnected
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.HourglassBottom
+import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.WifiTethering
+import androidx.compose.material.icons.rounded.Rowing
+import androidx.compose.material.icons.rounded.VerticalAlignBottom
+import androidx.compose.material.icons.rounded.VerticalAlignTop
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.DirectionsRun
+import androidx.compose.material.icons.rounded.AirlineSeatReclineExtra
+import androidx.compose.material.icons.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.SportsGymnastics
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.agupta07505.smartisland.di.SmartIslandRepositories
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -129,8 +147,8 @@ fun IslandCollapsedContent(
                             bitmap = artwork.asImageBitmap(),
                             contentDescription = null,
                             modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
                         )
                     } else {
                         Box(
@@ -204,6 +222,9 @@ fun IslandCollapsedContent(
                 }
                 IslandMode.Stopwatch -> {
                     StopwatchCollapsedGlyph(notification = notification, settings = settings)
+                }
+                IslandMode.Fitness -> {
+                    FitnessCollapsedLeft()
                 }
                 IslandMode.Empty -> Unit
             }
@@ -303,7 +324,208 @@ fun IslandCollapsedContent(
                 IslandMode.Stopwatch -> {
                     StopwatchTimer(notification = notification, color = Color(settings.stopwatchColor))
                 }
+                IslandMode.Fitness -> {
+                    FitnessCollapsedRight()
+                }
                 IslandMode.Empty -> Unit
+            }
+        }
+    }
+}
+
+val FitnessBlue = Color(0xFF38BDF8) // Electric Sky Blue - 做组发力、运动中、专属动作图案高亮
+val FitnessOrange = Color(0xFFFF9800) // Energetic Vibrant Orange - 组间休息、倒计时指示
+
+fun getShortExerciseName(fullName: String): String {
+    val clean = fullName.trim()
+    return when {
+        clean.contains("面拉") -> "面拉"
+        clean.contains("颈后高位下拉") -> "颈后高位下拉"
+        clean.contains("坐姿划船") -> "坐姿划船"
+        clean.contains("引体向上") -> "辅助引体"
+        clean.contains("反手高位下拉") -> "反手下拉"
+        clean.contains("坐姿器械推胸") -> "器械推胸"
+        clean.contains("史密斯机上斜推胸") -> "上斜推胸"
+        clean.contains("龙门架绳索下拉") -> "绳索下拉"
+        clean.contains("坐姿器械推举") -> "器械推举"
+        clean.contains("蝴蝶机反向飞鸟") -> "反向飞鸟"
+        clean.contains("蝴蝶机夹胸") -> "蝴蝶夹胸"
+        clean.contains("椭圆机") -> "椭圆机"
+        clean.contains("腿弯举") -> "腿弯举"
+        clean.contains("髋外展") -> "髋外展"
+        clean.contains("髋内收") -> "髋内收"
+        clean.contains("史密斯机臀推") -> "史密斯臀推"
+        clean.contains("倒蹬") -> "倒蹬机"
+        clean.contains("腿屈伸") -> "腿屈伸"
+        clean.contains("卷腹") -> "卷腹"
+        clean.contains("平板支撑") -> "平板支撑"
+        clean.contains("爬坡") -> "爬坡"
+        clean.contains("拉伸小腿") -> "拉伸小腿"
+        else -> clean.removeSuffix("器械").removeSuffix("机").trim()
+    }
+}
+
+fun getExerciseIcon(exerciseName: String, categoryName: String): ImageVector {
+    val name = exerciseName.lowercase()
+    val cat = categoryName.lowercase()
+    return when {
+        name.contains("划船") -> Icons.Rounded.Rowing
+        name.contains("下拉") -> Icons.Rounded.VerticalAlignBottom
+        name.contains("引体") -> Icons.Rounded.VerticalAlignTop
+        name.contains("面拉") -> Icons.Rounded.SwapHoriz
+        name.contains("爬坡") -> Icons.Rounded.TrendingUp
+        name.contains("椭圆机") || name.contains("跑") -> Icons.Rounded.DirectionsRun
+        name.contains("平板支撑") -> Icons.Rounded.HourglassBottom
+        name.contains("卷腹") || name.contains("腿屈伸") -> Icons.Rounded.AirlineSeatReclineExtra
+        name.contains("腿") || name.contains("髋") || name.contains("蹬") -> Icons.Rounded.DirectionsWalk
+        name.contains("臀") -> Icons.Rounded.SelfImprovement
+        name.contains("飞鸟") || name.contains("夹胸") -> Icons.Rounded.SportsGymnastics
+        name.contains("推") || name.contains("哑铃") -> Icons.Rounded.FitnessCenter
+        cat.contains("背") -> Icons.Rounded.VerticalAlignBottom
+        cat.contains("胸") -> Icons.Rounded.FitnessCenter
+        cat.contains("臀") || cat.contains("腿") -> Icons.Rounded.DirectionsWalk
+        cat.contains("腹") -> Icons.Rounded.AirlineSeatReclineExtra
+        cat.contains("肩") -> Icons.Rounded.FitnessCenter
+        cat.contains("有氧") -> Icons.Rounded.DirectionsRun
+        else -> Icons.Rounded.FitnessCenter
+    }
+}
+
+fun formatShortWeight(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    val trimmed = raw.trim()
+    if (trimmed == "空杆") return "空杆"
+    if (trimmed.contains("心率") || trimmed.startsWith("=")) return ""
+    val firstLine = trimmed.lines().firstOrNull()?.trim().orEmpty()
+    if (firstLine.isBlank() || firstLine.length > 8) return ""
+
+    val clean = if (firstLine.endsWith(".0")) {
+        firstLine.removeSuffix(".0")
+    } else firstLine
+
+    return when {
+        clean.endsWith("kg", ignoreCase = true) -> clean
+        clean.any { it.isDigit() } -> "${clean}kg"
+        else -> clean
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+internal fun FitnessCollapsedLeft() {
+    val context = LocalContext.current
+    val fitnessRepo = remember { SmartIslandRepositories.fitnessRepository(context) }
+    val state by fitnessRepo.sessionState.collectAsState()
+    val exercise = state.currentExercise
+
+    val iconTint = if (state.isResting) FitnessOrange else FitnessBlue
+    val actionIcon = getExerciseIcon(exercise?.name.orEmpty(), state.categoryName)
+    val shortName = getShortExerciseName(exercise?.name ?: "举铁伴侣")
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.widthIn(max = 54.dp)
+    ) {
+        Icon(
+            imageVector = actionIcon,
+            contentDescription = "Fitness Action",
+            tint = iconTint,
+            modifier = Modifier.size(13.dp)
+        )
+        Text(
+            text = shortName,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier.basicMarquee()
+        )
+    }
+}
+
+@Composable
+internal fun FitnessCollapsedRight() {
+    val context = LocalContext.current
+    val fitnessRepo = remember { SmartIslandRepositories.fitnessRepository(context) }
+    val state by fitnessRepo.sessionState.collectAsState()
+    val exercise = state.currentExercise
+    val shortWeight = formatShortWeight(exercise?.weight)
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+        modifier = Modifier.widthIn(max = 50.dp)
+    ) {
+        if (shortWeight.isNotBlank()) {
+            Text(
+                text = shortWeight,
+                color = Color.White,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
+
+        if (state.isResting) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "休息",
+                    color = FitnessOrange,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 9.sp
+                )
+                Text(
+                    text = "${state.restSecondsRemaining}s",
+                    color = FitnessOrange,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 12.sp
+                )
+            }
+        } else if (state.exerciseSecondsRemaining > 0) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "${state.currentSet}/${state.totalSets}",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 11.sp
+                )
+                Text(
+                    text = "${state.exerciseSecondsRemaining}s",
+                    color = FitnessBlue,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 12.sp
+                )
+            }
+        } else {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "${state.currentSet}/${state.totalSets}",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 11.sp
+                )
+                Text(
+                    text = "${state.setElapsedSeconds}s",
+                    color = FitnessBlue,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 12.sp
+                )
             }
         }
     }

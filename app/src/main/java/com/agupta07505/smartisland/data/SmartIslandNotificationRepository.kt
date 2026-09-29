@@ -53,7 +53,7 @@ class SmartIslandNotificationRepository : INotificationRepository {
             }
             updated.takeLast(MAX_STORED_NOTIFICATIONS)
         }
-        if (autoExpand && isNewNotification) {
+        if (autoExpand) {
             _autoExpandEvent.tryEmit(notification.key)
         }
     }
@@ -302,6 +302,17 @@ class SmartIslandNotificationRepository : INotificationRepository {
                     IslandNotificationAction("Pause", null),
                     IslandNotificationAction("Reset", null)
                 )
+            )
+            IslandMode.Fitness -> IslandNotification(
+                key = "demo_fitness",
+                packageName = "com.agupta07505.smartisland",
+                appName = "健身伴侣",
+                title = "颈后高位下拉 (第2/4组)",
+                text = "休息: 28s",
+                timeMillis = System.currentTimeMillis(),
+                mode = IslandMode.Fitness,
+                progress = 28,
+                progressMax = 30
             )
             IslandMode.Empty -> null
         }

@@ -121,16 +121,16 @@ fun IslandOverlayView(
     val transition = updateTransition(targetState = expanded, label = "islandTransition")
 
     val sizeSpec = spring<androidx.compose.ui.unit.Dp>(
-        dampingRatio = 0.72f,
-        stiffness = 520f
+        dampingRatio = 0.65f,
+        stiffness = 450f
     )
     val sizeSpecFloat = spring<Float>(
-        dampingRatio = 0.72f,
-        stiffness = 520f
+        dampingRatio = 0.65f,
+        stiffness = 450f
     )
     val heightSpec = spring<androidx.compose.ui.unit.Dp>(
-        dampingRatio = 0.76f,
-        stiffness = 520f
+        dampingRatio = 0.65f,
+        stiffness = 450f
     )
     val alphaSpec = tween<Float>(
         durationMillis = 190,
@@ -153,20 +153,24 @@ fun IslandOverlayView(
     }
 
     val compactGap = COMPACT_INDICATOR_GAP_DP.dp
-    val miniPillWidth = settings.width.dp
+    val miniPillWidth = remember(activeMode, settings.width) {
+        when (activeMode) {
+            IslandMode.Fitness -> settings.width.dp
+            else -> settings.width.dp
+        }
+    }
     val circleSize = settings.height.dp
     val compactShapes = compactNotificationShapes(notifications.size, expanded)
     val hasCompanion = notifications.size >= 2
-    val collapsedGroupWidth = settings.width.dp + if (hasCompanion) compactGap + circleSize else 0.dp
-    val collapsedMainLeft = (screenCenter + settings.xOffset.dp - settings.width.dp / 2f)
-        .coerceIn(
-            compactGap,
-            (screenWidth - collapsedGroupWidth - compactGap).coerceAtLeast(compactGap)
-        )
+    val minMainLeft = compactGap
+    val maxMainLeft = (screenWidth - miniPillWidth - compactGap).coerceAtLeast(minMainLeft)
+    val collapsedMainLeft = (screenCenter + settings.xOffset.dp - miniPillWidth / 2f)
+        .coerceIn(minMainLeft, maxMainLeft)
+    // Primary island horizontal position is always fixed regardless of whether secondary island exists
     val collapsedMainOffset = if (isFullWidth) {
-        collapsedMainLeft + settings.width.dp / 2f - screenCenter
+        settings.xOffset.dp
     } else {
-        if (hasCompanion) -(compactGap + circleSize) / 2f else 0.dp
+        if (hasCompanion) (compactGap + circleSize) / 2f else 0.dp
     }
     val expandedTopOffset = if (hasCompanion) {
         statusBarHeight.dp.coerceAtLeast(circleSize + compactGap)
@@ -198,13 +202,13 @@ fun IslandOverlayView(
     val isHiding = isIdleHiding || (settings.autoHidePill && isAutoHidden)
 
     val width by transition.animateDp(transitionSpec = { sizeSpec }, label = "islandWidth") {
-        if (it) expandedWidth else if (isHiding) 0.dp else settings.width.dp
+        if (it) expandedWidth else if (isHiding) 0.dp else miniPillWidth
     }
     val height by transition.animateDp(transitionSpec = { heightSpec }, label = "islandHeight") {
         if (it) expandedHeight else if (isHiding) 0.dp else settings.height.dp
     }
     val yOffset by transition.animateDp(transitionSpec = { sizeSpec }, label = "islandYOffset") {
-        if (it) expandedTopOffset else 0.dp
+        if (it) expandedTopOffset else settings.yOffset.dp
     }
     val radius by transition.animateDp(transitionSpec = { sizeSpec }, label = "islandRadius") {
         if (it) 34.dp else if (isHiding) 0.dp else settings.cornerRadius.dp
@@ -272,7 +276,7 @@ fun IslandOverlayView(
     }
 
     // Dual Pill (Multi-Tasking Split Island) Detection:
-    // When 2 or more notifications exist (e.g. Music + Notification/Timer/Call), split into Main Pill + Secondary Bubble
+    // When 2 or more notifications exist (e.g. Music + Notification/Timer/Call/Fitness), split into Main Pill + Secondary Bubble
     val secondaryNotification = if (notifications.size >= 2) {
         notifications.firstOrNull { it.key != activeNotification?.key }
     } else null
@@ -298,12 +302,12 @@ fun IslandOverlayView(
     )
     val secondaryScale by animateFloatAsState(
         targetValue = if (isSplitMode && !isHiding) 1f else 0.3f,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = 480f),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 450f),
         label = "secondaryScale"
     )
     val secondaryBubbleWidth by animateDpAsState(
         targetValue = if (secondaryIsPill) miniPillWidth else circleSize,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 520f),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 450f),
         label = "secondaryBubbleWidth"
     )
     val secondaryPillProgress = (miniPillWidth - circleSize).value.let { widthDelta ->
@@ -315,7 +319,7 @@ fun IslandOverlayView(
     }
     val secondaryBubbleCorner by animateDpAsState(
         targetValue = if (secondaryIsPill) settings.cornerRadius.dp else circleSize / 2f,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 520f),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 450f),
         label = "secondaryBubbleCorner"
     )
     val tertiaryAlpha by animateFloatAsState(
@@ -325,21 +329,19 @@ fun IslandOverlayView(
     )
     val tertiaryScale by animateFloatAsState(
         targetValue = if (showTertiaryPill && !isHiding) 1f else 0.3f,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = 480f),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 450f),
         label = "tertiaryScale"
     )
 
     val expandedCompactX = collapsedMainLeft
-    val collapsedSecondaryOffset = if (isFullWidth) {
-        collapsedMainLeft + settings.width.dp + compactGap - screenCenter + circleSize / 2f
-    } else {
-        (settings.width.dp + compactGap) / 2f
-    }
     val secondaryOffset by animateDpAsState(
         targetValue = when {
-            !expanded -> collapsedSecondaryOffset
-            secondaryIsPill -> if (isFullWidth) (expandedCompactX - screenCenter + miniPillWidth / 2f) else 0.dp
-            else -> if (isFullWidth) (expandedCompactX + miniPillWidth + compactGap - screenCenter + circleSize / 2f) else ((miniPillWidth + compactGap) / 2f)
+            secondaryIsPill -> if (isFullWidth) settings.xOffset.dp else 0.dp
+            else -> if (isFullWidth) {
+                settings.xOffset.dp - (miniPillWidth / 2f + compactGap + circleSize / 2f)
+            } else {
+                -((miniPillWidth + compactGap) / 2f)
+            }
         },
         animationSpec = spring(dampingRatio = 0.75f, stiffness = 520f),
         label = "secondaryOffset"
@@ -357,6 +359,7 @@ fun IslandOverlayView(
                     currentOnToggle()
                 }
             }
+
     } else {
         modifier.fillMaxSize()
     }
@@ -370,10 +373,11 @@ fun IslandOverlayView(
         if (isHiding && !currentExpanded) {
             Box(
                 modifier = Modifier
-                    .width(settings.width.dp)
+                    .width(miniPillWidth)
                     .height(settings.height.dp)
                     .graphicsLayer {
                         translationX = collapsedMainOffset.toPx()
+                        translationY = settings.yOffset.dp.toPx()
                     }
                     .pointerInput(Unit) {
                         detectTapGestures {
@@ -385,6 +389,142 @@ fun IslandOverlayView(
                                 // Empty notifications idle hiding: expand favorite shortcuts
                                 currentOnToggle()
                             }
+                        }
+                    }
+            )
+        }
+
+        // Match the narrow WindowManager touch region so nearby controls remain clickable.
+        if (!currentExpanded && !isHiding) {
+            val touchWidth = miniPillWidth + 8.dp
+            val touchHeight = settings.yOffset.dp + settings.height.dp + 4.dp
+            Box(
+                modifier = Modifier
+                    .width(touchWidth)
+                    .height(touchHeight)
+                    .graphicsLayer {
+                        translationX = collapsedMainOffset.toPx()
+                    }
+                    .pointerInput(displayMetrics.density, isInputActive) {
+                        if (isInputActive) return@pointerInput
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            userInteractionTimestamp = System.currentTimeMillis()
+                            val startPos = down.position
+                            val pointerId = down.id
+                            var lastPos = startPos
+                            var isHoldRegistered = false
+
+                            val holdJob = scope.launch {
+                                kotlinx.coroutines.delay(HOLD_GESTURE_THRESHOLD_MS)
+                                isHoldRegistered = true
+                                triggerHapticVibration(context)
+                            }
+
+                            while (true) {
+                                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                lastPos = change.position
+
+                                val curDeltaX = lastPos.x - startPos.x
+                                val curDeltaY = lastPos.y - startPos.y
+
+                                if (abs(curDeltaX) > 8f || abs(curDeltaY) > 8f) {
+                                    holdJob.cancel()
+                                }
+
+                                if (change.changedToUp() || !change.pressed) {
+                                    change.consume()
+                                    holdJob.cancel()
+
+                                    val density = displayMetrics.density
+                                    val swipeThreshold = 12f * density
+                                    val tapThreshold = 10f * density
+
+                                    val deltaX = lastPos.x - startPos.x
+                                    val deltaY = lastPos.y - startPos.y
+                                    val absDeltaX = abs(deltaX)
+                                    val absDeltaY = abs(deltaY)
+                                    val isHorizontalSwipe = absDeltaX > absDeltaY && absDeltaX > swipeThreshold
+                                    val isTap = absDeltaX < tapThreshold && absDeltaY < tapThreshold
+
+                                    val isFitnessMode = activeMode == IslandMode.Fitness
+                                    val fitnessRepo = SmartIslandRepositories.fitnessRepository(context)
+
+                                    if (isFitnessMode && isHorizontalSwipe) {
+                                        triggerHapticVibration(context)
+                                        if (deltaX < 0) {
+                                            fitnessRepo.nextSet()
+                                        } else {
+                                            fitnessRepo.undoOrPreviousSet()
+                                        }
+                                    } else if (activeMode == IslandMode.Music && isHorizontalSwipe) {
+                                        triggerHapticVibration(context)
+                                        val currentNotif = notifications.getOrNull(safeIndex)
+                                        val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                                        if (deltaX < 0) {
+                                            val nextAction = currentNotif?.actionIntents?.find {
+                                                val t = it.title.lowercase()
+                                                t.contains("下") || t.contains("next") || t.contains("skip")
+                                            }
+                                            if (nextAction?.pendingIntent != null) {
+                                                try { nextAction.pendingIntent.send() } catch (e: Exception) {}
+                                            } else {
+                                                audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_NEXT))
+                                                audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_NEXT))
+                                            }
+                                        } else {
+                                            val prevAction = currentNotif?.actionIntents?.find {
+                                                val t = it.title.lowercase()
+                                                t.contains("上") || t.contains("prev") || t.contains("back")
+                                            }
+                                            if (prevAction?.pendingIntent != null) {
+                                                try { prevAction.pendingIntent.send() } catch (e: Exception) {}
+                                            } else {
+                                                audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+                                                audioManager?.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+                                            }
+                                        }
+                                    } else if (notifications.size > 1 && isHorizontalSwipe) {
+                                        triggerHapticVibration(context)
+                                        if (deltaX < 0) {
+                                            onPageSelected((selectedIndex + 1) % notifications.size)
+                                        } else {
+                                            onPageSelected((selectedIndex - 1 + notifications.size) % notifications.size)
+                                        }
+                                    } else if (isHorizontalSwipe) {
+                                        triggerHapticVibration(context)
+                                        currentOnDismiss()
+                                    } else if (isTap) {
+                                        if (activeMode == IslandMode.Empty) {
+                                            triggerHapticVibration(context)
+                                            try {
+                                                val launchIntent = android.content.Intent(context, com.agupta07505.smartisland.MainActivity::class.java).apply {
+                                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                                }
+                                                context.startActivity(launchIntent)
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("IslandOverlayView", "Failed to launch MainActivity", e)
+                                            }
+                                        } else {
+                                            currentOnToggle()
+                                        }
+                                    } else if (deltaY > swipeThreshold) {
+                                        currentOnToggle()
+                                    } else if (deltaY < -swipeThreshold) {
+                                        if (isFitnessMode) {
+                                            fitnessRepo.cancelRestTimer()
+                                        } else {
+                                            currentOnDismiss()
+                                        }
+                                    }
+                                    break
+                                } else if (!change.pressed) {
+                                    holdJob.cancel()
+                                    break
+                                }
+                            }
+                            holdJob.cancel()
                         }
                     }
             )
@@ -402,9 +542,9 @@ fun IslandOverlayView(
                     scaleY = switchScaleAnim.value
                 }
                 .then(
-                    if (settings.enableShadow && !isHiding) {
+                    if (settings.enableShadow && currentExpanded && !isHiding) {
                         Modifier.shadow(
-                            elevation = if (currentExpanded) 22.dp else 14.dp,
+                            elevation = 16.dp,
                             shape = RoundedCornerShape(safeRadius),
                             clip = false,
                             ambientColor = Color.Black,
@@ -412,104 +552,129 @@ fun IslandOverlayView(
                         )
                     } else Modifier
                 )
-                .clip(RoundedCornerShape(safeRadius))
-                .background(Color.Black.copy(alpha = settings.opacity))
-                .pointerInput(displayMetrics.density, isInputActive) {
-                    if (isInputActive) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        userInteractionTimestamp = System.currentTimeMillis()
-                        val pressTimeMs = System.currentTimeMillis()
-                        var isHoldRegistered = false
-                        var dragAccumulator = 0f
-                        var isDragging = false
+                .then(
+                    if (currentExpanded) {
+                        Modifier.pointerInput(displayMetrics.density, isInputActive) {
+                            if (isInputActive) return@pointerInput
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                userInteractionTimestamp = System.currentTimeMillis()
+                                val startPos = down.position
+                                val pointerId = down.id
+                                var lastPos = startPos
+                                var isHoldRegistered = false
+                                var isDragging = false
 
-                        val holdJob = scope.launch {
-                            kotlinx.coroutines.delay(HOLD_GESTURE_THRESHOLD_MS)
-                            isHoldRegistered = true
-                            triggerHapticVibration(context)
-                        }
-
-                        val pointerId = down.id
-
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-
-                            if (change.changedToUp()) {
-                                change.consume()
-                                holdJob.cancel()
-                                val totalElapsedMs = System.currentTimeMillis() - pressTimeMs
-                                val swipeUpThreshold = -SWIPE_THRESHOLD_DP * displayMetrics.density
-                                val swipeDownThreshold = SWIPE_THRESHOLD_DP * displayMetrics.density
-
-                                if (currentExpanded) {
-                                    if (isDragging && dragOffset < swipeUpThreshold) {
-                                        if (isHoldRegistered || totalElapsedMs >= HOLD_GESTURE_THRESHOLD_MS) {
-                                            currentOnDismissAll()
-                                        } else {
-                                            currentOnDismiss()
-                                        }
-                                    } else if (isDragging && dragOffset > swipeDownThreshold) {
-                                        currentOnOpenFloatingWindow()
-                                    } else if (!isDragging || abs(dragOffset) < 10f) {
-                                        if (!isHoldRegistered) {
-                                            val currentNotification = notifications.getOrNull(safeIndex)
-                                            if (currentNotification != null) {
-                                                currentOnOpenNotification(currentNotification)
-                                            } else {
-                                                SmartIslandRepositories.notificationRepository(context).resetTimer()
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    if (!isDragging || abs(dragOffset) < 10f) {
-                                        currentOnToggle()
-                                    }
+                                val holdJob = scope.launch {
+                                    kotlinx.coroutines.delay(HOLD_GESTURE_THRESHOLD_MS)
+                                    isHoldRegistered = true
+                                    triggerHapticVibration(context)
                                 }
-                                break
-                            } else if (change.isConsumed) {
-                                holdJob.cancel()
-                                break
-                            } else {
-                                val dragAmount = change.positionChange().y
-                                if (abs(dragAmount) > 0.5f) {
-                                    isDragging = true
-                                    if (currentExpanded) {
-                                        change.consume()
-                                        dragAccumulator += dragAmount
-                                        dragOffset = dragAccumulator.coerceIn(
+
+                                while (true) {
+                                    val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                    lastPos = change.position
+
+                                    val curDeltaX = lastPos.x - startPos.x
+                                    val curDeltaY = lastPos.y - startPos.y
+
+                                    if (abs(curDeltaX) > 8f || abs(curDeltaY) > 8f) {
+                                        holdJob.cancel()
+                                        isDragging = true
+                                    }
+
+                                    if (isDragging) {
+                                        dragOffset = curDeltaY.coerceIn(
                                             -DRAG_MAX_OFFSET_DP * displayMetrics.density,
                                             DRAG_MAX_OFFSET_DP * displayMetrics.density
                                         )
                                     }
-                                }
-                            }
-                        }
 
-                        holdJob.cancel()
-                        if (dragOffset != 0f) {
-                            scope.launch {
-                                androidx.compose.animation.core.Animatable(dragOffset).animateTo(
-                                    targetValue = 0f,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessMedium
-                                    )
-                                ) {
-                                    dragOffset = value
+                                    if (change.changedToUp() || !change.pressed) {
+                                        val wasConsumedByChild = change.isConsumed
+                                        change.consume()
+                                        holdJob.cancel()
+
+                                        val density = displayMetrics.density
+                                        val swipeThreshold = 12f * density
+                                        val tapThreshold = 10f * density
+
+                                        val deltaX = lastPos.x - startPos.x
+                                        val deltaY = lastPos.y - startPos.y
+                                        val absDeltaX = abs(deltaX)
+                                        val absDeltaY = abs(deltaY)
+
+                                        if (deltaY < -swipeThreshold) {
+                                            // Swipe Up when expanded -> Collapse
+                                            currentOnToggle()
+                                        } else if (absDeltaX < tapThreshold && absDeltaY < tapThreshold && !wasConsumedByChild) {
+                                            // Tap when expanded
+                                            if (!isHoldRegistered) {
+                                                if (activeMode == IslandMode.Fitness) {
+                                                    val fitnessRepo = SmartIslandRepositories.fitnessRepository(context)
+                                                    val fState = fitnessRepo.sessionState.value
+                                                    val videoUrl = fState.currentExercise?.videoUrl?.trim()
+                                                    if (!videoUrl.isNullOrBlank()) {
+                                                        try {
+                                                            val intent = android.content.Intent(
+                                                                android.content.Intent.ACTION_VIEW,
+                                                                android.net.Uri.parse(videoUrl)
+                                                            ).apply {
+                                                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                                            }
+                                                            context.startActivity(intent)
+                                                        } catch (e: Exception) {
+                                                            android.widget.Toast.makeText(context, "无法唤醒视频 App", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    } else {
+                                                        android.widget.Toast.makeText(context, "当前动作暂无视频链接", android.widget.Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } else {
+                                                    val currentNotification = notifications.getOrNull(safeIndex)
+                                                    if (currentNotification != null &&
+                                                        currentNotification.mode != IslandMode.Battery &&
+                                                        currentNotification.mode != IslandMode.Timer
+                                                    ) {
+                                                        currentOnOpenNotification(currentNotification)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        break
+                                    } else if (!change.pressed) {
+                                        holdJob.cancel()
+                                        break
+                                    }
+                                }
+
+                                holdJob.cancel()
+                                if (dragOffset != 0f) {
+                                    scope.launch {
+                                        androidx.compose.animation.core.Animatable(dragOffset).animateTo(
+                                            targetValue = 0f,
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMedium
+                                            )
+                                        ) {
+                                            dragOffset = value
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                },
+                    } else Modifier
+                )
+                .clip(RoundedCornerShape(safeRadius))
+                .background(Color.Black.copy(alpha = settings.opacity)),
             contentAlignment = Alignment.TopCenter
         ) {
             // Collapsed content layer (pinned to fixed pill bounds at top-center, cancelling yOffset)
             if (collapsedAlpha > 0f) {
                 Box(
                     modifier = Modifier
-                        .width(settings.width.dp)
+                        .width(miniPillWidth)
                         .height(settings.height.dp)
                         .align(Alignment.TopCenter)
                         .graphicsLayer {
@@ -566,7 +731,7 @@ fun IslandOverlayView(
                     .absoluteOffset {
                         IntOffset(
                             secondaryOffset.roundToPx(),
-                            0
+                            settings.yOffset.dp.roundToPx()
                         )
                     }
                     .width(secondaryBubbleWidth)
@@ -577,9 +742,9 @@ fun IslandOverlayView(
                         scaleY = secondaryScale * switchScaleAnim.value
                     }
                     .then(
-                        if (settings.enableShadow) {
+                        if (settings.enableShadow && currentExpanded) {
                             Modifier.shadow(
-                                elevation = 12.dp,
+                                elevation = 8.dp,
                                 shape = RoundedCornerShape(secondaryBubbleCorner),
                                 clip = false,
                                 ambientColor = Color.Black,
@@ -636,7 +801,7 @@ fun IslandOverlayView(
                     .absoluteOffset {
                         IntOffset(
                             (expandedCompactX - screenCenter + miniPillWidth / 2f).roundToPx(),
-                            0
+                            settings.yOffset.dp.roundToPx()
                         )
                     }
                     .width(miniPillWidth)
@@ -770,6 +935,9 @@ private fun SecondaryBubbleContent(
         IslandMode.Stopwatch -> {
             StopwatchCollapsedGlyph(notification = notification, settings = settings)
         }
+        IslandMode.Fitness -> {
+            FitnessCollapsedLeft()
+        }
         IslandMode.Notification, IslandMode.DownloadUpload, IslandMode.Empty -> {
             NotificationGlyph(notification = notification, settings = settings)
         }
@@ -806,6 +974,38 @@ private fun triggerHapticVibration(context: android.content.Context) {
     }
 }
 
+fun playNeteaseDailyRecommend(context: android.content.Context) {
+    try {
+        val uri = android.net.Uri.parse("orpheus://songrcmd?autoplay=1")
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            `package` = "com.netease.cloudmusic"
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        try {
+            val widgetUri = android.net.Uri.parse("orpheuswidget://songrcmd?autoplay=1")
+            val widgetIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, widgetUri).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                `package` = "com.netease.cloudmusic"
+            }
+            context.startActivity(widgetIntent)
+        } catch (e2: Exception) {
+            try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage("com.netease.cloudmusic")
+                if (launchIntent != null) {
+                    launchIntent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(launchIntent)
+                } else {
+                    android.widget.Toast.makeText(context, "请先安装网易云音乐 App", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e3: Exception) {
+                android.widget.Toast.makeText(context, "启动网易云音乐失败: ${e3.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+}
+
 internal enum class CompactNotificationShape { MiniPill, Circle }
 
 internal fun defaultEstimatedHeightForMode(mode: IslandMode?): Dp {
@@ -817,6 +1017,7 @@ internal fun defaultEstimatedHeightForMode(mode: IslandMode?): Dp {
         IslandMode.DownloadUpload, IslandMode.Hotspot -> 160.dp
         IslandMode.Bluetooth, IslandMode.Flashlight, IslandMode.ScreenRecording,
         IslandMode.Timer, IslandMode.Stopwatch -> 115.dp
+        IslandMode.Fitness -> 130.dp
         IslandMode.Empty, null -> 135.dp
     }
 }

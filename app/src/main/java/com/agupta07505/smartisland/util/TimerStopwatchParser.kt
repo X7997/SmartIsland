@@ -43,12 +43,14 @@ object TimerStopwatchParser {
     private val TIMER_KEYWORDS = listOf(
         "timer", "countdown", "time's up", "times up", "time is up",
         "timer paused", "timer running", "timer expired", "timer finished",
-        "remaining", "sec remaining", "min remaining"
+        "remaining", "sec remaining", "min remaining",
+        "倒计时", "计时器", "计时结束", "计时暂停", "剩余", "时间到"
     )
 
     private val STOPWATCH_KEYWORDS = listOf(
         "stopwatch", "lap", "laps", "split", "elapsed",
-        "stopwatch running", "stopwatch paused"
+        "stopwatch running", "stopwatch paused",
+        "秒表", "计次", "分段", "已用时间"
     )
 
     private val TIME_PATTERN = Pattern.compile("\\b(?:(\\d{1,2}):)?(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,2}))?\\b")
@@ -202,7 +204,8 @@ object TimerStopwatchParser {
 
         val finishKeywords = listOf(
             "time's up", "times up", "time is up", "timer finished",
-            "timer expired", "timer ended", "timer done"
+            "timer expired", "timer ended", "timer done",
+            "时间到", "计时结束"
         )
         if (finishKeywords.any { fullText.contains(it) }) return true
 
@@ -222,10 +225,14 @@ object TimerStopwatchParser {
         val fullText = extractFullText(notification)
 
         val hasResumeAction = actionLabels.any {
-            it.contains("resume") || it.contains("start") || it.contains("play") || it.contains("continue") || it.contains("unpause")
+            val t = it.lowercase()
+            t.contains("resume") || t.contains("start") || t.contains("play") || t.contains("continue") || t.contains("unpause") || t.contains("继续") || t.contains("恢复") || t.contains("开始")
         }
-        val hasPauseAction = actionLabels.any { it.contains("pause") }
-        val hasPausedKeyword = fullText.contains("paused") || fullText.contains("pause")
+        val hasPauseAction = actionLabels.any {
+            val t = it.lowercase()
+            t.contains("pause") || t.contains("暂停")
+        }
+        val hasPausedKeyword = fullText.lowercase().contains("paused") || fullText.lowercase().contains("pause") || fullText.contains("已暂停") || fullText.contains("暂停")
 
         if (hasResumeAction) return true
         if (hasPausedKeyword && !hasPauseAction) return true
@@ -240,10 +247,14 @@ object TimerStopwatchParser {
         val fullText = extractFullText(notification)
 
         val hasResumeAction = actionLabels.any {
-            it.contains("resume") || it.contains("start") || it.contains("play") || it.contains("continue") || it.contains("unpause")
+            val t = it.lowercase()
+            t.contains("resume") || t.contains("start") || t.contains("play") || t.contains("continue") || t.contains("unpause") || t.contains("继续") || t.contains("恢复") || t.contains("开始")
         }
-        val hasPauseAction = actionLabels.any { it.contains("pause") }
-        val hasPausedKeyword = fullText.contains("paused") || fullText.contains("pause")
+        val hasPauseAction = actionLabels.any {
+            val t = it.lowercase()
+            t.contains("pause") || t.contains("暂停")
+        }
+        val hasPausedKeyword = fullText.lowercase().contains("paused") || fullText.lowercase().contains("pause") || fullText.contains("已暂停") || fullText.contains("暂停")
 
         if (hasResumeAction) return true
         if (hasPausedKeyword && !hasPauseAction) return true
@@ -310,9 +321,9 @@ object TimerStopwatchParser {
             if (totalSeconds >= 0) return totalSeconds
         }
 
-        val hrMatcher = Pattern.compile("(\\d+)\\s*(?:h|hr|hrs|hours?)\\b", Pattern.CASE_INSENSITIVE).matcher(input)
-        val minMatcher = Pattern.compile("(\\d+)\\s*(?:m|min|mins|minutes?)\\b", Pattern.CASE_INSENSITIVE).matcher(input)
-        val secMatcher = Pattern.compile("(\\d+)\\s*(?:s|sec|secs|seconds?)\\b", Pattern.CASE_INSENSITIVE).matcher(input)
+        val hrMatcher = Pattern.compile("(\\d+)\\s*(?:h|hr|hrs|hours?|时|小时)\\b?", Pattern.CASE_INSENSITIVE).matcher(input)
+        val minMatcher = Pattern.compile("(\\d+)\\s*(?:m|min|mins|minutes?|分|分钟)\\b?", Pattern.CASE_INSENSITIVE).matcher(input)
+        val secMatcher = Pattern.compile("(\\d+)\\s*(?:s|sec|secs|seconds?|秒)\\b?", Pattern.CASE_INSENSITIVE).matcher(input)
         val hrs = if (hrMatcher.find()) hrMatcher.group(1)?.toLongOrNull() ?: 0L else 0L
         val mins = if (minMatcher.find()) minMatcher.group(1)?.toLongOrNull() ?: 0L else 0L
         val secs = if (secMatcher.find()) secMatcher.group(1)?.toLongOrNull() ?: 0L else 0L

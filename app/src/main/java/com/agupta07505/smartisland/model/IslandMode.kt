@@ -21,5 +21,6 @@ enum class IslandMode {
     Flashlight,
     ScreenRecording,
     Timer,
-    Stopwatch
+    Stopwatch,
+    Fitness
 }

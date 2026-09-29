@@ -128,24 +128,23 @@ object ShizukuManager {
      */
     suspend fun autoGrantAllPermissions(context: Context): Result<String> = withContext(Dispatchers.IO) {
         val pkg = context.packageName
-        val accessibilityClass = "$pkg/${SmartIslandOverlayService::class.java.name}"
         val notificationClass = "$pkg/${SmartIslandNotificationListenerService::class.java.name}"
-        val mergedAccessibilityServices = getMergedAccessibilityServices(context, accessibilityClass)
+        val accessibilityClass = "$pkg/${SmartIslandOverlayService::class.java.name}"
         val mergedNotificationListeners = getMergedNotificationListeners(context, notificationClass)
+        val mergedAccessibilityServices = getMergedAccessibilityServices(context, accessibilityClass)
 
         val commands = listOf(
             "appops set $pkg ACCESS_RESTRICTED_SETTINGS allow",
             "appops set $pkg GET_USAGE_STATS allow",
             "appops set $pkg SYSTEM_ALERT_WINDOW allow",
-            "appops set $pkg BIND_ACCESSIBILITY_SERVICE allow",
             "appops set $pkg POST_NOTIFICATION allow",
             "appops set $pkg AUTO_START allow",
             "appops set $pkg RUN_IN_BACKGROUND allow",
             "appops set $pkg RUN_ANY_IN_BACKGROUND allow",
-            "settings put secure enabled_accessibility_services $mergedAccessibilityServices",
-            "settings put secure accessibility_enabled 1",
             "cmd notification allow_listener $notificationClass",
             "settings put secure enabled_notification_listeners $mergedNotificationListeners",
+            "settings put secure enabled_accessibility_services $mergedAccessibilityServices",
+            "settings put secure accessibility_enabled 1",
             "am set-standby-bucket $pkg active",
             "dumpsys deviceidle whitelist +$pkg"
         )
@@ -168,14 +167,24 @@ object ShizukuManager {
     }
 
     /**
-     * Grants Notification Listener permission via Shizuku without overwriting other active listeners.
+     * Disables the persistent system warning notification for overlays via Shizuku.
+     */
+    suspend fun disableOverlayWarningNotification(): Result<String> = withContext(Dispatchers.IO) {
+        val commands = listOf(
+            "cmd notification set_bubbles enabled",
+            "settings put global show_processes_in_task_manager 0"
+        )
+        runShizukuCommands(commands)
+    }
+
+    /**
+     * Grants Notification Listener service permission via Shizuku without overwriting other active notification listeners.
      */
     suspend fun grantNotificationListener(context: Context): Result<String> = withContext(Dispatchers.IO) {
         val pkg = context.packageName
         val notificationClass = "$pkg/${SmartIslandNotificationListenerService::class.java.name}"
         val mergedNotificationListeners = getMergedNotificationListeners(context, notificationClass)
         val commands = listOf(
-            "appops set $pkg ACCESS_RESTRICTED_SETTINGS allow",
             "cmd notification allow_listener $notificationClass",
             "settings put secure enabled_notification_listeners $mergedNotificationListeners"
         )
@@ -183,17 +192,13 @@ object ShizukuManager {
     }
 
     /**
-     * Grants Accessibility service permission via Shizuku without overwriting other active accessibility services.
+     * Grants System Alert Window (Overlay) permission via Shizuku.
      */
-    suspend fun grantAccessibility(context: Context): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun grantOverlay(context: Context): Result<String> = withContext(Dispatchers.IO) {
         val pkg = context.packageName
-        val accessibilityClass = "$pkg/${SmartIslandOverlayService::class.java.name}"
-        val mergedAccessibilityServices = getMergedAccessibilityServices(context, accessibilityClass)
         val commands = listOf(
             "appops set $pkg ACCESS_RESTRICTED_SETTINGS allow",
-            "appops set $pkg BIND_ACCESSIBILITY_SERVICE allow",
-            "settings put secure enabled_accessibility_services $mergedAccessibilityServices",
-            "settings put secure accessibility_enabled 1"
+            "appops set $pkg SYSTEM_ALERT_WINDOW allow"
         )
         runShizukuCommands(commands)
     }

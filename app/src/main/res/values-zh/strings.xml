@@ -129,8 +129,12 @@
     <string name="shizuku_not_running">Shizuku 未运行或未获得授权</string>
     <string name="shizuku_success">已通过 Shizuku 成功授予权限</string>
     <string name="shizuku_failed">Shizuku 配置失败：%1$s</string>
-    <string name="perm_accessibility_title">无障碍悬浮窗</string>
+    <string name="perm_accessibility_title">系统悬浮窗权限</string>
     <string name="perm_accessibility_desc">允许 Smart Island 动态悬浮在状态栏与挖孔区域上方</string>
+    <string name="perm_accessibility_service_title">系统无障碍服务权限（锁定最顶层）</string>
+    <string name="perm_accessibility_service_desc">锁定 2400 层级超越系统状态栏，彻底杜绝手势滑动与切组被状态栏拦截</string>
+    <string name="perm_overlay_title">显示在其他应用上层权限</string>
+    <string name="perm_overlay_desc">允许 Smart Island 灵动岛悬浮显示在各应用上方</string>
     <string name="perm_notification_title">通知访问权限</string>
     <string name="perm_notification_desc">读取收到的消息、来电、媒体元数据与实时动态提示</string>
     <string name="perm_battery_title">忽略电池优化</string>

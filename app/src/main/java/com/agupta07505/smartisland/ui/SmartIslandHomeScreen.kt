@@ -15,6 +15,9 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.agupta07505.smartisland.util.OemAutostartUtil
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -48,6 +51,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
@@ -68,23 +72,31 @@ import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.FlashlightOn
 import androidx.compose.material.icons.rounded.Gesture
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HourglassBottom
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.People
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.WifiTethering
+import com.agupta07505.smartisland.ui.components.FemaleMuscleAnatomyDualView
+import com.agupta07505.smartisland.ui.components.MuscleMatcher
+import com.agupta07505.smartisland.ui.components.TargetMuscle
+import com.agupta07505.smartisland.ui.components.MuscleCategory
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -105,6 +117,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -217,16 +230,24 @@ fun SmartIslandHomeScreen(
         )
     }
 
-    var overlayGranted by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
+    var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var notificationGranted by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
     var batteryIgnored by remember { mutableStateOf(isBatteryOptimizationIgnored(context)) }
+    var accessibilityGranted by remember {
+        mutableStateOf(
+            com.agupta07505.smartisland.service.SmartIslandOverlayService.isSystemConnected ||
+                SystemServiceRecovery.isAccessibilityPermissionGranted(context)
+        )
+    }
 
     DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                overlayGranted = isAccessibilityServiceEnabled(context)
+                overlayGranted = Settings.canDrawOverlays(context)
                 notificationGranted = isNotificationListenerEnabled(context)
                 batteryIgnored = isBatteryOptimizationIgnored(context)
+                accessibilityGranted = com.agupta07505.smartisland.service.SmartIslandOverlayService.isSystemConnected ||
+                    SystemServiceRecovery.isAccessibilityPermissionGranted(context)
                 SystemServiceRecovery.requestRecovery(context)
             }
         }
@@ -241,7 +262,7 @@ fun SmartIslandHomeScreen(
     // Active preview mode for interactive live preview
     var previewMode by remember { mutableStateOf(IslandMode.Music) }
 
-    val canEnable = overlayGranted && notificationGranted && batteryIgnored
+    val canEnable = (overlayGranted || accessibilityGranted) && notificationGranted && batteryIgnored
 
     BackHandler(enabled = activeDetailSection != null) {
         transitionDirection = -1
@@ -308,7 +329,10 @@ fun SmartIslandHomeScreen(
                                 canEnable = canEnable,
                                 onCheckedChange = { turnOn ->
                                     if (turnOn) {
+                                        com.agupta07505.smartisland.service.SmartIslandOverlayService.wakeUpOverlaySession(context)
                                         SystemServiceRecovery.requestRecovery(context)
+                                    } else {
+                                        com.agupta07505.smartisland.service.SmartIslandOverlayService.stopOverlaySessionFromUser(context)
                                     }
                                     scope.launch { resolvedRepository.setEnabled(turnOn) }
                                 },
@@ -318,7 +342,13 @@ fun SmartIslandHomeScreen(
                                 }
                             )
 
-                            // 2. Interactive Simulation Lab
+                            // 2. Keep-Alive & Anti-Kill Guide Card
+                            KeepAliveProtectionCard()
+
+                            // 3. Fitness Companion Mode Card
+                            FitnessCompanionCard()
+
+                            // 3. Interactive Simulation Lab
                             SimulationLabCard(
                                 activeMode = previewMode,
                                 onModeSelect = { mode ->
@@ -336,6 +366,7 @@ fun SmartIslandHomeScreen(
                                 overlayGranted = overlayGranted,
                                 notificationGranted = notificationGranted,
                                 batteryIgnored = batteryIgnored,
+                                accessibilityGranted = accessibilityGranted,
                                 onOpenDiagnostics = {
                                     transitionDirection = 1
                                     activeDetailSection = FeatureDetailSection.PermissionsCenter
@@ -384,14 +415,17 @@ fun SmartIslandHomeScreen(
                     overlayGranted = overlayGranted,
                     notificationGranted = notificationGranted,
                     batteryIgnored = batteryIgnored,
+                    accessibilityGranted = accessibilityGranted,
                     onBack = {
                         transitionDirection = -1
                         activeDetailSection = null
                     },
                     onRefreshPermissions = {
-                        overlayGranted = isAccessibilityServiceEnabled(context)
+                        overlayGranted = Settings.canDrawOverlays(context)
                         notificationGranted = isNotificationListenerEnabled(context)
                         batteryIgnored = isBatteryOptimizationIgnored(context)
+                        accessibilityGranted = com.agupta07505.smartisland.service.SmartIslandOverlayService.isSystemConnected ||
+                            SystemServiceRecovery.isAccessibilityPermissionGranted(context)
                     }
                 )
             }
@@ -615,6 +649,766 @@ private fun MasterPowerCard(
 }
 
 @Composable
+private fun KeepAliveProtectionCard() {
+    val context = LocalContext.current
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { isExpanded = !isExpanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF3B82F6).copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shield,
+                            contentDescription = null,
+                            tint = Color(0xFF3B82F6),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "🛡️ 绿色生命周期与后台启停说明",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "在后台时伴随运行 · 清除后台即刻彻底销毁退出 · 0% CPU 占用与隐私安全",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Text(
+                    text = if (isExpanded) "收起 🔼" else "查看 🔽",
+                    color = Color(0xFF3B82F6),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                    Text(
+                        text = "💡 绿色设计理念（随退随止 · 零暗中监控）：\n" +
+                                "• 【在后台时启动】：只要应用在多任务后台保留（如按 Home 键返回桌面或切换其他 App），灵动岛悬浮窗稳定伴随运行，提供健身、音乐等悬浮交互。\n" +
+                                "• 【清除后台即退出】：一旦您在多任务界面上划清除后台，灵动岛立即物理移除屏幕上的悬浮窗与状态栏常驻通知，彻底释放 CPU 与内存，完全不留后台监控，切实保护您的隐私与信息安全！\n" +
+                                "• 【配置永久保存】：下次点击 App 图标秒级恢复，您的挖孔位置、宽度、健身计划等所有自定义配置已由本地 DataStore 永久保存，绝不丢失！",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "⚙️ 两种使用模式由您决定：",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "🟢 【推荐 · 用完即走模式】：直接使用，不加锁。用完在多任务上划清除后台，灵动岛立刻完全退出，干净无残留，0% CPU 占用。",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 15.sp
+                        )
+                        Text(
+                            text = "🔒 【全天候常驻模式（可选）】：若您希望一键清理多任务时灵动岛也不退出，可在多任务界面长按卡片点击“加锁”，并开启自启动与电池无限制。",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 15.sp
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                OemAutostartUtil.openAutostartSettings(context)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            Text("⚡ 去设置自启动", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                            .setData(Uri.parse("package:${context.packageName}"))
+                                    )
+                                }.onFailure {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            Text("🔋 电池设无限制", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FitnessCompanionCard() {
+    val context = LocalContext.current
+    val fitnessRepo = remember { SmartIslandRepositories.fitnessRepository(context) }
+    val plan by fitnessRepo.plan.collectAsState()
+    val planSourceInfo by fitnessRepo.planSourceInfo.collectAsState()
+    val sessionState by fitnessRepo.sessionState.collectAsState()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val result = fitnessRepo.importPlanFromUri(uri)
+            result.onSuccess { msg ->
+                Toast.makeText(context, "✅ $msg", Toast.LENGTH_LONG).show()
+            }.onFailure { err ->
+                Toast.makeText(context, "❌ 导入失败: ${err.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    var selectedCategory by remember(plan) {
+        mutableStateOf(plan.categories.firstOrNull()?.categoryName ?: "背")
+    }
+
+    val currentCategory = plan.categories.firstOrNull { it.categoryName == selectedCategory }
+        ?: plan.categories.firstOrNull()
+
+    var selectedExerciseIndex by remember(selectedCategory) { mutableStateOf(0) }
+    val currentExercise = currentCategory?.exercises?.getOrNull(
+        selectedExerciseIndex.coerceIn(0, (currentCategory.exercises.size - 1).coerceAtLeast(0))
+    )
+
+    val currentTargetMuscle = remember(currentExercise?.name, selectedCategory, currentExercise?.targetMuscle) {
+        MuscleMatcher.match(currentExercise?.name.orEmpty(), selectedCategory, currentExercise?.targetMuscle)
+    }
+    val themeColor = currentTargetMuscle.category.color
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.5.dp, themeColor.copy(alpha = 0.25f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. 顶部标题栏
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(themeColor.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.FitnessCenter,
+                                contentDescription = null,
+                                tint = themeColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "举铁伴侣 · 肌肉与器械训练",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = "一眼掌握目标肌群、训练器械与组数记录",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 2. 部位分类选择器 (胸-粉红 | 腹-绿 | 臀腿-紫/珊瑚红 | 背-蓝 | 肩-橙)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val availableCategories = if (plan.categories.isNotEmpty()) {
+                    plan.categories.map { it.categoryName }
+                } else {
+                    listOf("背", "臀腿", "腹", "胸", "肩")
+                }
+
+                availableCategories.forEach { catName ->
+                    val isSelected = (if (sessionState.isActive) sessionState.categoryName else selectedCategory) == catName
+                    val catColor = MuscleMatcher.getCategoryColor(catName)
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) catColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            )
+                            .clickable(enabled = !sessionState.isActive) {
+                                selectedCategory = catName
+                                selectedExerciseIndex = 0
+                            }
+                            .padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = catName,
+                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // 3. Apple Health 风格：女性人体正反双面解剖肌肉点亮图
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    FemaleMuscleAnatomyDualView(
+                        activeMuscle = currentTargetMuscle,
+                        activeCategory = selectedCategory,
+                        isDarkTheme = false
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // 目标肌群中文胶囊标签
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(themeColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "目标肌群: ${currentTargetMuscle.displayName}",
+                                color = themeColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. 动作切换小标签栏 (点击快速切换动作并联动人体肌群)
+            if (currentCategory != null && currentCategory.exercises.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "训练动作选择：",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        currentCategory.exercises.forEachIndexed { index, ex ->
+                            val isExSelected = selectedExerciseIndex == index
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isExSelected) themeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    )
+                                    .border(
+                                        width = if (isExSelected) 1.5.dp else 0.dp,
+                                        color = if (isExSelected) themeColor else Color.Transparent,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { selectedExerciseIndex = index }
+                                    .padding(vertical = 7.dp, horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = ex.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isExSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isExSelected) themeColor else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. 核心器械训练卡片 (回答“怎么练”：动作、器械、重量、组数、设置)
+            if (currentExercise != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = themeColor.copy(alpha = 0.05f)),
+                    border = BorderStroke(1.dp, themeColor.copy(alpha = 0.25f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // 动作名称 + 器械标签
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = currentExercise.name,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            val equipName = currentExercise.equipment ?: "专业器械"
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(themeColor.copy(alpha = 0.15f))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = equipName,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = themeColor
+                                )
+                            }
+                        }
+
+                        // 关键训练指标行：重量 | 组数×次数 | 组间休息
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // 重量
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "当前重量",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                val rawWeight = currentExercise.weight.trim()
+                                val cleanWeight = if (rawWeight.endsWith(".0")) rawWeight.removeSuffix(".0") else rawWeight
+                                val displayWeight = when {
+                                    cleanWeight.isBlank() -> "自重/徒手"
+                                    cleanWeight.endsWith("kg", ignoreCase = true) || cleanWeight == "空杆" -> cleanWeight
+                                    else -> "$cleanWeight kg"
+                                }
+                                Text(
+                                    text = displayWeight,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = themeColor
+                                )
+                            }
+
+                            // 组数×次数
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "计划做组",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "${currentExercise.reps} × ${currentExercise.sets}组",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            // 组间休息
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "组间休息",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "1 min",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9800)
+                                )
+                            }
+                        }
+
+                        // 1. 个人动作注意事项 / 器械调节 (表格第三列总结)
+                        if (!currentExercise.setupTips.isNullOrBlank()) {
+                            HorizontalDivider(color = themeColor.copy(alpha = 0.15f))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFF9800).copy(alpha = 0.08f))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "📌 注意事项",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9800),
+                                    modifier = Modifier.padding(top = 1.dp)
+                                )
+                                Text(
+                                    text = currentExercise.setupTips,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // 2. 部位发力口诀
+                        if (!currentCategory.cue.isNullOrBlank() && currentCategory.cue != currentExercise.setupTips) {
+                            if (currentExercise.setupTips.isNullOrBlank()) {
+                                HorizontalDivider(color = themeColor.copy(alpha = 0.15f))
+                            }
+                            Row(
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Lightbulb,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFB300),
+                                    modifier = Modifier
+                                        .size(15.dp)
+                                        .padding(top = 2.dp)
+                                )
+                                Text(
+                                    text = "发力口诀：${currentCategory.cue}",
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // 视频教程按钮 (若存在)
+                        if (!currentExercise.videoUrl.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(themeColor.copy(alpha = 0.1f))
+                                    .clickable {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(currentExercise.videoUrl)).apply {
+                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "无法唤醒视频播放", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Videocam,
+                                    contentDescription = null,
+                                    tint = themeColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "查看标准动作视频演示",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = themeColor
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 6. 训练状态与开启按钮
+            if (sessionState.isActive) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(themeColor.copy(alpha = 0.12f))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "🟢 正在训练: ${sessionState.categoryName}部",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = themeColor
+                    )
+                    Text(
+                        text = "当前动作: ${sessionState.currentExercise?.name ?: ""} (第 ${sessionState.currentSet}/${sessionState.totalSets} 组)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (sessionState.isResting) {
+                        Text(
+                            text = "⏳ 组间休息: ${sessionState.restSecondsRemaining}s / 60s",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF9800)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFEF4444))
+                        .clickable {
+                            fitnessRepo.stopWorkout()
+                            Toast.makeText(context, "今日训练已结束，灵动岛已收起", Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(vertical = 13.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🛑 结束训练",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(themeColor)
+                        .clickable {
+                            val hasAccessibility = com.agupta07505.smartisland.service.SmartIslandOverlayService.isSystemConnected ||
+                                SystemServiceRecovery.isAccessibilityPermissionGranted(context)
+                            val hasOverlay = Settings.canDrawOverlays(context)
+                            if (!hasOverlay && !hasAccessibility) {
+                                Toast.makeText(context, "请先授予 Smart Island 悬浮窗或无障碍权限", Toast.LENGTH_LONG).show()
+                                runCatching {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                }.onFailure {
+                                    context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                                }
+                                return@clickable
+                            }
+                            com.agupta07505.smartisland.service.SmartIslandOverlayService.wakeUpOverlaySession(context)
+                            fitnessRepo.startWorkout(selectedCategory)
+                            Toast.makeText(context, "已开启【$selectedCategory】训练！灵动岛已置顶就绪", Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(vertical = 13.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "🚀 开始今日【$selectedCategory】训练 (1 min 组间休息)",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // 7. 计划状态与文件导入 / 重置
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "📋 当前健身计划数据",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = planSourceInfo,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF2563EB).copy(alpha = 0.12f))
+                        .clickable {
+                            filePickerLauncher.launch(
+                                arrayOf(
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    "application/vnd.ms-excel",
+                                    "application/json",
+                                    "application/octet-stream",
+                                    "*/*"
+                                )
+                            )
+                        }
+                        .padding(vertical = 10.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.FileDownload,
+                        contentDescription = null,
+                        tint = Color(0xFF2563EB),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "📂 导入计划 (.xlsx/.json)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2563EB)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .weight(0.9f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .clickable {
+                            val result = fitnessRepo.resetToDefaultPlan()
+                            Toast.makeText(context, "已恢复内置健身计划: $result", Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(vertical = 10.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "🔄 恢复内置计划",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SimulationLabCard(
     activeMode: IslandMode,
     onModeSelect: (IslandMode) -> Unit,
@@ -795,7 +1589,7 @@ private fun SimulationLabCard(
                     )
                 }
 
-                // Row 7: Stopwatch
+                // Row 7: Stopwatch & Fitness
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -806,7 +1600,15 @@ private fun SimulationLabCard(
                         iconTint = Color(0xFF06B6D4),
                         isSelected = activeMode == IslandMode.Stopwatch,
                         onClick = { onModeSelect(IslandMode.Stopwatch) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
+                    )
+                    ModeChipButton(
+                        label = "举铁伴侣",
+                        icon = Icons.Rounded.FitnessCenter,
+                        iconTint = Color(0xFFFF9800),
+                        isSelected = activeMode == IslandMode.Fitness,
+                        onClick = { onModeSelect(IslandMode.Fitness) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -888,6 +1690,7 @@ private fun DiagnosticsSummaryCard(
     overlayGranted: Boolean,
     notificationGranted: Boolean,
     batteryIgnored: Boolean,
+    accessibilityGranted: Boolean = false,
     onOpenDiagnostics: () -> Unit
 ) {
     Card(
@@ -952,6 +1755,11 @@ private fun DiagnosticsSummaryCard(
             ) {
                 StatusBadgePill(
                     label = stringResource(R.string.diag_accessibility),
+                    isGranted = accessibilityGranted,
+                    modifier = Modifier.weight(1f)
+                )
+                StatusBadgePill(
+                    label = stringResource(R.string.perm_overlay_title),
                     isGranted = overlayGranted,
                     modifier = Modifier.weight(1f)
                 )
@@ -1265,6 +2073,7 @@ private fun DetailScreenHost(
     overlayGranted: Boolean,
     notificationGranted: Boolean,
     batteryIgnored: Boolean,
+    accessibilityGranted: Boolean = false,
     onBack: () -> Unit,
     onRefreshPermissions: () -> Unit
 ) {
@@ -1352,8 +2161,25 @@ private fun DetailScreenHost(
                     overlayGranted = overlayGranted,
                     notificationGranted = notificationGranted,
                     batteryIgnored = batteryIgnored,
+                    accessibilityGranted = accessibilityGranted,
+                    onAccessibilityClick = {
+                        runCatching {
+                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            context.startActivity(intent)
+                        }.onFailure {
+                            Toast.makeText(context, "请在系统设置中找到并开启【Smart Island 灵动岛】无障碍服务", Toast.LENGTH_LONG).show()
+                        }
+                    },
                     onOverlayClick = {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        runCatching {
+                            context.startActivity(intent)
+                        }.onFailure {
+                            context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                        }
                     },
                     onNotificationClick = {
                         val detailIntent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS").apply {
@@ -1399,22 +2225,8 @@ private fun isNotificationListenerEnabled(context: Context): Boolean {
     } == true
 }
 
-private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    val expectedComponentName = ComponentName(context, com.agupta07505.smartisland.service.SmartIslandOverlayService::class.java)
-    val enabledServicesSetting = Settings.Secure.getString(
-        context.contentResolver,
-        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-    ) ?: return false
-    val colonSplitter = android.text.TextUtils.SimpleStringSplitter(':')
-    colonSplitter.setString(enabledServicesSetting)
-    while (colonSplitter.hasNext()) {
-        val componentNameString = colonSplitter.next()
-        val enabledService = ComponentName.unflattenFromString(componentNameString)
-        if (enabledService != null && enabledService == expectedComponentName) {
-            return true
-        }
-    }
-    return false
+private fun isOverlayPermissionGranted(context: Context): Boolean {
+    return Settings.canDrawOverlays(context)
 }
 
 private fun isBatteryOptimizationIgnored(context: Context): Boolean {

@@ -13,20 +13,31 @@ import com.agupta07505.smartisland.util.isScreenRecordingComplete
 import com.agupta07505.smartisland.util.runCatchingLogged
 import com.agupta07505.smartisland.util.runSuspendCatchingLogged
 import com.agupta07505.smartisland.util.toIslandMode
+import com.agupta07505.smartisland.util.NotificationFilter
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.media.session.MediaController
 import android.media.session.MediaSession
+import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
@@ -50,6 +61,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -110,10 +122,20 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                 }
             }
         }
+        runCatchingLogged(TAG, "Register active sessions listener in onCreate failed") {
+            val componentName = ComponentName(this, SmartIslandNotificationListenerService::class.java)
+            val mainHandler = Handler(Looper.getMainLooper())
+            mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsListener)
+            mediaSessionManager?.addOnActiveSessionsChangedListener(sessionsListener, componentName, mainHandler)
+        }
     }
 
     override fun onDestroy() {
         isSystemConnected = false
+        runCatchingLogged(TAG, "Unregister active sessions listener in onDestroy failed") {
+            mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsListener)
+            mediaControllerCallbacks.clear()
+        }
         pendingRemovals.values.forEach { it.cancel() }
         pendingRemovals.clear()
         pendingSuppressionJobs.values.forEach { it.cancel() }
@@ -242,10 +264,27 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                     return@runSuspendCatchingLogged
                 }
 
+                val isMusicApp = listOf(
+                    "com.netease.cloudmusic",
+                    "com.tencent.qqmusic",
+                    "com.kugou.android",
+                    "cn.kuwo.player",
+                    "com.luna.music",
+                    "com.spotify.music"
+                ).any { sbn.packageName.startsWith(it) }
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                if (isMusicApp && audioManager?.isMusicActive == true) {
+                    android.util.Log.d(TAG, "Music notification removed from shade, but audio is still active. Keeping music island: ${sbn.key}")
+                    return@runSuspendCatchingLogged
+                }
+
                 // Removed by posting app, user, framework timeout, or after initial suppression window.
                 android.util.Log.d(TAG, "Genuinely removed, cleaning up: ${sbn.key}")
                 clearSuppressed(sbn.key)
                 notificationRepository.removeNotification(sbn.key)
+                if (isMusicApp && audioManager?.isMusicActive != true) {
+                    notificationRepository.removeNotification("music_${sbn.packageName}")
+                }
             }
             pendingRemovals.remove(sbn.key)
         }
@@ -274,13 +313,153 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                     return@runSuspendCatchingLogged
                 }
 
+                val isMusicApp = listOf(
+                    "com.netease.cloudmusic",
+                    "com.tencent.qqmusic",
+                    "com.kugou.android",
+                    "cn.kuwo.player",
+                    "com.luna.music",
+                    "com.spotify.music"
+                ).any { sbn.packageName.startsWith(it) }
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                if (isMusicApp && audioManager?.isMusicActive == true) {
+                    android.util.Log.d(TAG, "Music notification removed (no reason), but audio is active. Keeping music island: ${sbn.key}")
+                    return@runSuspendCatchingLogged
+                }
+
                 android.util.Log.d(TAG, "Removing from island repo: ${sbn.key}")
                 clearSuppressed(sbn.key)
                 notificationRepository.removeNotification(sbn.key)
+                if (isMusicApp && audioManager?.isMusicActive != true) {
+                    notificationRepository.removeNotification("music_${sbn.packageName}")
+                }
             }
             pendingRemovals.remove(sbn.key)
         }
         pendingRemovals[sbn.key] = job
+        }
+    }
+
+    private val mediaControllerCallbacks = ConcurrentHashMap<MediaSession.Token, MediaController.Callback>()
+
+    private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+        android.util.Log.d(TAG, "OnActiveSessionsChangedListener fired: ${controllers?.size} controllers")
+        updateMusicFromActiveSessions()
+    }
+
+    private fun registerControllerCallback(ctrl: MediaController) {
+        val tok = ctrl.sessionToken ?: return
+        if (mediaControllerCallbacks.containsKey(tok)) return
+        val cb = object : MediaController.Callback() {
+            override fun onPlaybackStateChanged(state: PlaybackState?) {
+                updateMusicFromController(ctrl)
+            }
+            override fun onMetadataChanged(metadata: MediaMetadata?) {
+                updateMusicFromController(ctrl)
+            }
+            override fun onSessionDestroyed() {
+                mediaControllerCallbacks.remove(tok)
+            }
+        }
+        runCatchingLogged(TAG, "Register controller callback failed") {
+            ctrl.registerCallback(cb, Handler(Looper.getMainLooper()))
+            mediaControllerCallbacks[tok] = cb
+        }
+    }
+
+    private fun updateMusicFromActiveSessions() {
+        serviceScope.launch {
+            runSuspendCatchingLogged(TAG, "updateMusicFromActiveSessions failed") {
+                val allControllers = activeMediaControllers
+                allControllers.forEach { ctrl ->
+                    registerControllerCallback(ctrl)
+                }
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                val isAudioActive = audioManager?.isMusicActive == true
+                val isKnownMusic = { pkg: String? ->
+                    pkg != null && NotificationFilter.isKnownMusicPackage(pkg)
+                }
+                val playingCtrl = allControllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+                    ?: if (isAudioActive) {
+                        allControllers.firstOrNull { isKnownMusic(it.packageName) }
+                    } else null
+                    ?: allControllers.firstOrNull { isKnownMusic(it.packageName) }
+                    ?: allControllers.firstOrNull()
+
+                if (playingCtrl != null) {
+                    updateMusicFromController(playingCtrl)
+                }
+            }
+        }
+    }
+
+    private fun updateMusicFromController(controller: MediaController) {
+        serviceScope.launch {
+            runSuspendCatchingLogged(TAG, "updateMusicFromController failed") {
+                val pkg = controller.packageName ?: return@runSuspendCatchingLogged
+                if (pkg == packageName || currentSettings.disabledNotificationPackages.contains(pkg)) return@runSuspendCatchingLogged
+
+                val metadata = controller.metadata
+                val pState = controller.playbackState
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                val isAudioActive = audioManager?.isMusicActive == true
+                val isPlaying = (pState?.state == PlaybackState.STATE_PLAYING) || isAudioActive
+
+                val existing = notificationRepository.notifications.value.find {
+                    it.packageName == pkg && it.mode == IslandMode.Music
+                }
+
+                if (!isPlaying && !isAudioActive && (pState?.state == PlaybackState.STATE_STOPPED || pState?.state == PlaybackState.STATE_NONE)) {
+                    if (existing != null) {
+                        notificationRepository.removeNotification(existing.key)
+                    }
+                    return@runSuspendCatchingLogged
+                }
+
+                val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+                    ?: existing?.title
+                    ?: "正在播放"
+                val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_AUTHOR)
+                    ?: existing?.text
+                    ?: ""
+                val artwork = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                    ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+                    ?: existing?.largeIcon
+                    ?: loadAppIconBitmap(pkg)
+
+                val appLabel = runCatchingLogged(TAG, "Get app label failed") {
+                    val appInfo = packageManager.getApplicationInfo(pkg, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } ?: existing?.appName ?: pkg
+
+                val targetKey = existing?.key ?: "music_$pkg"
+                val musicNotif = IslandNotification(
+                    key = targetKey,
+                    packageName = pkg,
+                    appName = appLabel,
+                    title = title,
+                    text = artist,
+                    timeMillis = existing?.timeMillis ?: System.currentTimeMillis(),
+                    icon = existing?.icon ?: loadAppIconBitmap(pkg),
+                    largeIcon = artwork,
+                    actionIntents = existing?.actionIntents.orEmpty(),
+                    category = "transport",
+                    progress = 0,
+                    progressMax = 0,
+                    mediaPositionMs = pState?.estimatedPosition() ?: existing?.mediaPositionMs,
+                    mediaDurationMs = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } ?: existing?.mediaDurationMs,
+                    mediaIsPlaying = isPlaying,
+                    mediaToken = controller.sessionToken ?: existing?.mediaToken,
+                    mode = IslandMode.Music,
+                    contentIntent = controller.sessionActivity ?: existing?.contentIntent
+                )
+
+                notificationRepository.postNotification(musicNotif, autoExpand = false)
+            }
         }
     }
 
@@ -318,6 +497,15 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
                         }
                         handleNotificationPosted(sbn, settings)
                     }
+
+                    runCatchingLogged(TAG, "Register active sessions listener failed") {
+                        val componentName = android.content.ComponentName(this@SmartIslandNotificationListenerService, SmartIslandNotificationListenerService::class.java)
+                        val mainHandler = Handler(Looper.getMainLooper())
+                        mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsListener)
+                        mediaSessionManager?.addOnActiveSessionsChangedListener(sessionsListener, componentName, mainHandler)
+                    }
+
+                    updateMusicFromActiveSessions()
                 }
             }
         }
@@ -325,6 +513,10 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         isSystemConnected = false
+        runCatchingLogged(TAG, "Unregister active sessions listener on disconnect failed") {
+            mediaSessionManager?.removeOnActiveSessionsChangedListener(sessionsListener)
+            mediaControllerCallbacks.clear()
+        }
         super.onListenerDisconnected()
         runCatchingLogged(TAG, "Notification-listener self-rebind failed") {
             requestRebind(
@@ -336,20 +528,12 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val expected = android.content.ComponentName(this, SmartIslandOverlayService::class.java)
-        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-        val splitter = android.text.TextUtils.SimpleStringSplitter(':')
-        splitter.setString(enabled)
-        while (splitter.hasNext()) {
-            val cn = android.content.ComponentName.unflattenFromString(splitter.next())
-            if (cn != null && cn == expected) return true
-        }
-        return false
-    }
-
     private fun ensureOverlayServiceRunning(): Boolean {
-        return isAccessibilityServiceEnabled() || Settings.canDrawOverlays(this)
+        val canDraw = Settings.canDrawOverlays(this)
+        if (canDraw && currentSettings.enabled) {
+            SmartIslandOverlayService.wakeUpOverlaySession(this)
+        }
+        return canDraw
     }
 
     private fun isIncomingCall(notification: Notification): Boolean {
@@ -386,7 +570,30 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
             suppressSystemNotification(sbn.key)
         }
 
-        val mediaInfo = if (mode == IslandMode.Music) findMediaInfo(notification, sbn.packageName) else null
+        val mediaController = if (mode == IslandMode.Music) {
+            val ctrl = notification.mediaSessionController() ?: bestControllerFor(sbn.packageName)
+            if (ctrl != null) registerControllerCallback(ctrl)
+            ctrl
+        } else null
+
+        val mediaMeta = mediaController?.metadata
+        val mediaState = mediaController?.playbackState
+        val audioManager = if (mode == IslandMode.Music) getSystemService(Context.AUDIO_SERVICE) as? AudioManager else null
+        val isAudioActive = audioManager?.isMusicActive == true
+        val hasPauseAction = notification.actions?.any { action ->
+            val title = action.title?.toString()?.lowercase().orEmpty()
+            title.contains("暂停") || title.contains("pause")
+        } == true
+        val mediaIsPlaying = if (mode == IslandMode.Music) {
+            (mediaState?.state == PlaybackState.STATE_PLAYING) ||
+            (mediaState?.state == PlaybackState.STATE_BUFFERING) ||
+            isAudioActive ||
+            hasPauseAction
+        } else false
+        val mediaPositionMs = if (mode == IslandMode.Music) mediaState?.estimatedPosition() else null
+        val mediaDurationMs = if (mode == IslandMode.Music) mediaMeta?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } else null
+        val mediaToken = if (mode == IslandMode.Music) (notification.mediaSessionToken() ?: mediaController?.sessionToken) else null
+
         val appName = runCatchingLogged(TAG, "GetApplicationInfo failed") {
             val appInfo = packageManager.getApplicationInfo(sbn.packageName, 0)
             packageManager.getApplicationLabel(appInfo).toString()
@@ -442,49 +649,73 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
             else -> sbn.postTime
         }
 
-        val notifTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-            ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
-            ?: (if (mode == IslandMode.Stopwatch) "Stopwatch" else if (mode == IslandMode.Timer) "Timer" else "")
-        val notifText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-            ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-            ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
-            ?: extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
-            ?: notification.tickerText?.toString()
-            ?: (if (mode == IslandMode.Stopwatch) "Running" else if (mode == IslandMode.Timer) "Running" else "")
+        val titleFromMeta = mediaMeta?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            ?: mediaMeta?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+        val artistFromMeta = mediaMeta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+            ?: mediaMeta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            ?: mediaMeta?.getString(MediaMetadata.METADATA_KEY_AUTHOR)
+        val artworkFromMeta = mediaMeta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: mediaMeta?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            ?: mediaMeta?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+        val notifTitle = if (mode == IslandMode.Music && !titleFromMeta.isNullOrBlank()) {
+            titleFromMeta
+        } else {
+            extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+                ?: (if (mode == IslandMode.Stopwatch) "Stopwatch" else if (mode == IslandMode.Timer) "Timer" else if (mode == IslandMode.Music) "正在播放" else "")
+        }
+
+        val notifText = if (mode == IslandMode.Music && !artistFromMeta.isNullOrBlank()) {
+            artistFromMeta
+        } else {
+            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+                ?: extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
+                ?: notification.tickerText?.toString()
+                ?: (if (mode == IslandMode.Stopwatch) "Running" else if (mode == IslandMode.Timer) "Running" else "")
+        }
+
+        val finalTitle = notifTitle
+        val finalText = notifText
+        val finalArtwork = if (mode == IslandMode.Music && artworkFromMeta != null) {
+            artworkFromMeta
+        } else {
+            notification.loadLargeIconBitmap()
+        }
 
         notificationRepository.postNotification(
             IslandNotification(
                 key = sbn.key,
                 packageName = sbn.packageName,
                 appName = appName,
-                title = notifTitle,
-                text = notifText,
+                title = finalTitle,
+                text = finalText,
                 timeMillis = computedTimeMillis,
                 icon = loadAppIconBitmap(sbn.packageName),
-                largeIcon = mediaInfo?.artwork ?: notification.loadLargeIconBitmap(),
+                largeIcon = finalArtwork,
                 actionIntents = actions,
                 category = notification.category,
                 progress = extras.getInt(Notification.EXTRA_PROGRESS, 0),
                 progressMax = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0),
-                mediaPositionMs = mediaInfo?.positionMs,
-                mediaDurationMs = mediaInfo?.durationMs,
-                mediaIsPlaying = mediaInfo?.isPlaying == true,
-                mediaToken = runCatchingLogged(TAG, "GetMediaToken failed") {
-                    val ex = notification.extras
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                        ex.getParcelable(Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        ex.getParcelable(Notification.EXTRA_MEDIA_SESSION)
-                    }
-                },
+                mediaPositionMs = mediaPositionMs,
+                mediaDurationMs = mediaDurationMs,
+                mediaIsPlaying = mediaIsPlaying,
+                mediaToken = mediaToken,
                 mode = mode,
-                contentIntent = notification.contentIntent
+                contentIntent = if (mode == IslandMode.Music && notification.contentIntent == null) mediaController?.sessionActivity else notification.contentIntent
             ),
             autoExpand = shouldIslandOnly && settings.autoExpandOnNotification
         )
 
-        if (settings.enableNotificationHistory && mode != IslandMode.Music) {
+        if (mode == IslandMode.Music) {
+            val existing = notificationRepository.notifications.value
+            existing.filter { it.packageName == sbn.packageName && it.key != sbn.key }
+                .forEach { notificationRepository.removeNotification(it.key) }
+        }
+
+        if (settings.enableNotificationHistory) {
             serviceScope.launch {
                 runSuspendCatchingLogged(TAG, "Failed to record notification history") {
                     historyRepository.saveEntry(
@@ -513,12 +744,6 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
 
         if (isNewNotif && (mode == IslandMode.Notification || shouldIslandOnly) && mode != IslandMode.DownloadUpload) {
             playNotificationSound(sbn)
-        }
-
-        if (mode == IslandMode.Music) {
-            val existing = notificationRepository.notifications.value
-            existing.filter { it.packageName == sbn.packageName && it.key != sbn.key }
-                .forEach { notificationRepository.removeNotification(it.key) }
         }
 
         if (mode == IslandMode.IncomingCall) {
@@ -841,16 +1066,20 @@ class SmartIslandNotificationListenerService : NotificationListenerService() {
         return controller.extractMediaInfo()
     }
 
-    private fun Notification.mediaSessionController(): MediaController? {
-        val token = runCatchingLogged(TAG, "GetMediaSessionToken failed") {
-            val ex = extras
+    private fun Notification.mediaSessionToken(): MediaSession.Token? {
+        return runCatchingLogged(TAG, "GetMediaSessionToken failed") {
+            val ex = extras ?: return null
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 ex.getParcelable(Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 ex.getParcelable(Notification.EXTRA_MEDIA_SESSION)
             }
-        } ?: return null
+        }
+    }
+
+    private fun Notification.mediaSessionController(): MediaController? {
+        val token = mediaSessionToken() ?: return null
         return runCatchingLogged(TAG, "MediaController init failed") { MediaController(this@SmartIslandNotificationListenerService, token) }
     }
 

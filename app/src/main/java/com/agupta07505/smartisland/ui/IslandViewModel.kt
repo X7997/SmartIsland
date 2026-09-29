@@ -43,17 +43,9 @@ class IslandViewModel(
     val notifications = notificationRepo.notifications
     val foregroundPackage = MutableStateFlow<String?>(null)
 
-    val visibleNotifications: StateFlow<List<IslandNotification>> = combine(
-        notifications,
-        foregroundPackage
-    ) { list, fgPkg ->
-        if (fgPkg.isNullOrEmpty()) {
-            list
-        } else {
-            list.filterNot { notif ->
-                notif.mode == IslandMode.Music && notif.packageName == fgPkg
-            }
-        }
+    val visibleNotifications: StateFlow<List<IslandNotification>> = combine(notifications, foregroundPackage) { list, fgPkg ->
+        if (fgPkg.isNullOrEmpty()) list
+        else list.filterNot { it.mode == IslandMode.Music && it.packageName == fgPkg }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
@@ -80,7 +72,28 @@ class IslandViewModel(
             runSuspendCatchingLogged(TAG, "Notifications collector failed") {
                 visibleNotifications.collect { list ->
                     selectedIndex.update { currentSelected ->
-                        currentSelected.coerceIn(0, (list.size - 1).coerceAtLeast(0))
+                        val currentMode = list.getOrNull(currentSelected)?.mode
+                        val fitnessIdx = list.indexOfFirst { it.mode == IslandMode.Fitness }
+                        if (fitnessIdx >= 0) {
+                            if (currentMode == IslandMode.Music && expanded.value) {
+                                currentSelected
+                            } else {
+                                fitnessIdx
+                            }
+                        } else {
+                            val playingMusicIdx = list.indexOfFirst { it.mode == IslandMode.Music && it.mediaIsPlaying }
+                            val anyMusicIdx = list.indexOfFirst { it.mode == IslandMode.Music }
+                            val targetMusicIdx = if (playingMusicIdx >= 0) playingMusicIdx else anyMusicIdx
+                            if (targetMusicIdx >= 0) {
+                                if (currentMode == IslandMode.IncomingCall) {
+                                    currentSelected
+                                } else {
+                                    targetMusicIdx
+                                }
+                            } else {
+                                currentSelected.coerceIn(0, (list.size - 1).coerceAtLeast(0))
+                            }
+                        }
                     }
                 }
             }
@@ -88,8 +101,17 @@ class IslandViewModel(
         viewModelScope.launch {
             runSuspendCatchingLogged(TAG, "Auto-expand collector failed") {
                 notificationRepo.autoExpandEvent.collect { key ->
-                    val list = visibleNotifications.value
-                    val index = list.indexOfFirst { it.key == key }
+                    var list = visibleNotifications.value
+                    val isFitnessActive = list.any { it.mode == IslandMode.Fitness }
+                    if (isFitnessActive && key != com.agupta07505.smartisland.data.FitnessRepository.FITNESS_NOTIFICATION_KEY) {
+                        return@collect
+                    }
+                    var index = list.indexOfFirst { it.key == key }
+                    if (index < 0) {
+                        kotlinx.coroutines.delay(60L)
+                        list = visibleNotifications.value
+                        index = list.indexOfFirst { it.key == key }
+                    }
                     if (index >= 0) {
                         selectedIndex.value = index
                         expand()
@@ -108,7 +130,8 @@ class IslandViewModel(
             runSuspendCatchingLogged(TAG, "Expanded-state collector failed") {
                 expanded.collect { isExpanded ->
                     if (isExpanded) {
-                        if (!isInputActive.value) {
+                        val activeMode = visibleNotifications.value.getOrNull(selectedIndex.value)?.mode
+                        if (!isInputActive.value && activeMode != IslandMode.Fitness) {
                             startAutoCollapseTimer()
                         }
                     } else {

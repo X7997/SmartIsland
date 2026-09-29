@@ -33,6 +33,8 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.FitScreen
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -64,6 +66,7 @@ import com.agupta07505.smartisland.R
 import com.agupta07505.smartisland.data.SmartIslandSettings
 import com.agupta07505.smartisland.data.SmartIslandSettingsRepository
 import com.agupta07505.smartisland.ui.SliderSettingItem
+import com.agupta07505.smartisland.util.CameraCutoutDetector
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -135,6 +138,72 @@ fun PositionsSection(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
+                // Auto Hardware Cutout Detection Button
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable {
+                            val detected = CameraCutoutDetector.detect(context)
+                            localWidth = detected.widthDp
+                            localHeight = detected.heightDp
+                            localXOffset = detected.xOffsetDp
+                            localYOffset = detected.yOffsetDp
+                            scope.launch {
+                                repository.setPosition(
+                                    width = detected.widthDp,
+                                    height = detected.heightDp,
+                                    xOffset = detected.xOffsetDp,
+                                    yOffset = detected.yOffsetDp
+                                )
+                            }
+                            if (detected.hasHardwareCutout) {
+                                Toast.makeText(
+                                    context,
+                                    "✅ 成功对齐物理挖孔：X偏移 ${detected.xOffsetDp.toInt()}dp, 宽度 ${detected.widthDp.toInt()}dp",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "已应用标准居中适配，您可继续通过下方滑块微调",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CenterFocusStrong,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🔍 自动检测硬件挖孔位置",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "读取屏幕 DisplayCutout 硬件参数，一键对齐前摄",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
                 // Presets 2x2 Responsive Grid
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Row 1: Center Hole & Wide Island
@@ -149,6 +218,11 @@ fun PositionsSection(
                             icon = Icons.Rounded.CenterFocusStrong,
                             isSelected = isCenterSelected,
                             onClick = {
+                                localWidth = 112f
+                                localHeight = 34f
+                                localXOffset = 0f
+                                localYOffset = 10f
+                                localCornerRadius = 20f
                                 scope.launch {
                                     repository.setPosition(
                                         width = 112f,
@@ -170,6 +244,11 @@ fun PositionsSection(
                             icon = Icons.Rounded.FitScreen,
                             isSelected = isWideSelected,
                             onClick = {
+                                localWidth = 150f
+                                localHeight = 38f
+                                localXOffset = 0f
+                                localYOffset = 12f
+                                localCornerRadius = 22f
                                 scope.launch {
                                     repository.setPosition(
                                         width = 150f,
@@ -197,6 +276,11 @@ fun PositionsSection(
                             icon = Icons.AutoMirrored.Rounded.AlignHorizontalLeft,
                             isSelected = isLeftSelected,
                             onClick = {
+                                localWidth = 105f
+                                localHeight = 34f
+                                localXOffset = calculatedLeftX
+                                localYOffset = 10f
+                                localCornerRadius = 20f
                                 scope.launch {
                                     repository.setPosition(
                                         width = 105f,
@@ -218,6 +302,11 @@ fun PositionsSection(
                             icon = Icons.AutoMirrored.Rounded.AlignHorizontalRight,
                             isSelected = isRightSelected,
                             onClick = {
+                                localWidth = 105f
+                                localHeight = 34f
+                                localXOffset = calculatedRightX
+                                localYOffset = 10f
+                                localCornerRadius = 20f
                                 scope.launch {
                                     repository.setPosition(
                                         width = 105f,
@@ -241,6 +330,11 @@ fun PositionsSection(
                         icon = Icons.Rounded.Smartphone,
                         isSelected = isCompactSelected,
                         onClick = {
+                            localWidth = 92f
+                            localHeight = 30f
+                            localXOffset = 0f
+                            localYOffset = 8f
+                            localCornerRadius = 18f
                             scope.launch {
                                 repository.setPosition(
                                     width = 92f,
@@ -411,9 +505,43 @@ fun PositionsSection(
                 }
 
                 Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = {
+                        scope.launch {
+                            repository.setPosition(
+                                width = localWidth,
+                                height = localHeight,
+                                xOffset = localXOffset,
+                                yOffset = localYOffset
+                            )
+                            repository.setCornerRadius(localCornerRadius)
+                            repository.setOpacity(localOpacity)
+                        }
+                        Toast.makeText(
+                            context,
+                            "✅ 挖孔布局已保存！已永久生效（关闭后台、关机重启依然有效）",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("💾 保存并锁定当前布局设置", fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = {
                         scope.launch { repository.resetPosition() }
+                        localWidth = SmartIslandSettings.Default.width
+                        localHeight = SmartIslandSettings.Default.height
+                        localXOffset = SmartIslandSettings.Default.xOffset
+                        localYOffset = SmartIslandSettings.Default.yOffset
+                        localCornerRadius = SmartIslandSettings.Default.cornerRadius
+                        localOpacity = SmartIslandSettings.Default.opacity
                         Toast.makeText(context, context.getString(R.string.toast_reset_position), Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth(),

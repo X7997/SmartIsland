@@ -25,6 +25,28 @@ object NotificationFilter {
         "com.agupta07505.smartisland"
     )
 
+    val KNOWN_MUSIC_PACKAGES = setOf(
+        "com.netease.cloudmusic",
+        "com.tencent.qqmusic",
+        "com.kugou.android",
+        "cn.kuwo.player",
+        "com.luna.music",
+        "com.spotify.music",
+        "com.apple.android.music",
+        "com.google.android.apps.youtube.music",
+        "com.samsung.android.music",
+        "com.ximalaya.ting.android",
+        "fm.qingting.qtradio",
+        "com.migu.music",
+        "remix.myplayer",
+        "com.foobar2000.foobar2000",
+        "com.maxmpz.audioplayer"
+    )
+
+    fun isKnownMusicPackage(packageName: String): Boolean {
+        return KNOWN_MUSIC_PACKAGES.any { packageName.startsWith(it) }
+    }
+
     fun shouldSuppressFromIsland(
         sbn: StatusBarNotification,
         packageManager: PackageManager,
@@ -37,8 +59,8 @@ object NotificationFilter {
         val notification = sbn.notification
         val mode = notification.toIslandMode(sbn, liveActivitiesEnabled, navigationEnabled, deviceType)
 
-        // Hotspot, Screen Recording, Timer, Stopwatch notifications are allowed even if posted by system/OEM frameworks
-        if (mode == IslandMode.Hotspot || mode == IslandMode.ScreenRecording || mode == IslandMode.IncomingCall || mode == IslandMode.Timer || mode == IslandMode.Stopwatch) {
+        // Hotspot, Screen Recording, Timer, Stopwatch, Music notifications are allowed even if posted by background services
+        if (mode == IslandMode.Hotspot || mode == IslandMode.ScreenRecording || mode == IslandMode.IncomingCall || mode == IslandMode.Timer || mode == IslandMode.Stopwatch || mode == IslandMode.Music) {
             if (packageName == "com.agupta07505.smartisland") return true
             if (packageName in disabledNotificationPackages) return true
         } else {
@@ -62,7 +84,7 @@ object NotificationFilter {
             ?: extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
             ?: extras?.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
             ?: notification.tickerText?.toString()
-        if (title.isNullOrBlank() && text.isNullOrBlank() && mode != IslandMode.Stopwatch && mode != IslandMode.Timer && mode != IslandMode.ScreenRecording) return true
+        if (title.isNullOrBlank() && text.isNullOrBlank() && mode != IslandMode.Stopwatch && mode != IslandMode.Timer && mode != IslandMode.ScreenRecording && mode != IslandMode.Music) return true
 
         // Suppress external torch / flashlight notifications from entering Smart Island,
         // because Smart Island natively manages physical torch state via CameraManager.TorchCallback.
@@ -226,8 +248,27 @@ fun Notification.toIslandMode(
     }
 
     // 7. Media & Music Playback
-    val hasMediaSession = extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
-    if (category == Notification.CATEGORY_TRANSPORT || hasMediaSession) {
+    val hasMediaSession = extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true ||
+        extras?.containsKey("android.mediaSession") == true
+    val isKnownMusicApp = NotificationFilter.isKnownMusicPackage(packageName)
+
+    val hasMediaAction = actions.orEmpty().any { action ->
+        val t = action.title?.toString()?.lowercase().orEmpty()
+        t.contains("play") || t.contains("pause") || t.contains("prev") || t.contains("next") ||
+        t.contains("播放") || t.contains("暂停") || t.contains("下一首") || t.contains("上一首")
+    }
+
+    // Determine if the notification should be treated as music playback.
+    // Existing checks cover known music apps, transport category, media session, or media actions.
+    // However, some apps (e.g., NetEase Cloud Music) may not expose a MediaSession token.
+    // Add a fallback: if the app is a known music app and the title or text contains typical music keywords,
+    // treat it as music regardless of the session.
+    val musicKeywords = listOf("播放", "音乐", "song", "track", "artist", "album", "网易云", "网易云音乐", "cloudmusic")
+    val titleLower = titleText.lowercase()
+    val isMusicByKeyword = isKnownMusicApp && musicKeywords.any { titleLower.contains(it) }
+    val isMediaTransport = category == Notification.CATEGORY_TRANSPORT || hasMediaSession
+    val isActionFromMusic = hasMediaAction && (isKnownMusicApp || isMediaTransport)
+    if (isKnownMusicApp || isMediaTransport || isActionFromMusic || isMusicByKeyword) {
         return IslandMode.Music
     }
 

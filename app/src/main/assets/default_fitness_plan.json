@@ -1,0 +1,244 @@
+{
+  "categories": [
+    {
+      "categoryName": "背",
+      "cue": "练背做下拉的时候把手想象成一个钩子，不要去发力只是勾住它，然后拿肘主动发力去找腰。",
+      "exercises": [
+        {
+          "name": "高位下拉",
+          "weight": "44.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/TmU52Qg_XsQ",
+          "targetMuscle": "背阔肌",
+          "equipment": "高位下拉机",
+          "setupTips": "拿肘主动发力去找腰，手做钩子不发力"
+        },
+        {
+          "name": "坐姿划船",
+          "weight": "22.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/Nvj_lzPNoZo/",
+          "targetMuscle": "中背、菱形肌、中下斜方肌",
+          "equipment": "坐姿划船机",
+          "setupTips": "挺胸沉肩，大臂贴近身体向后拉"
+        },
+        {
+          "name": "绳索面拉",
+          "weight": "44.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/G4x0-imOzHk/",
+          "targetMuscle": "三角肌后束、肩胛稳定肌群",
+          "equipment": "龙门架绳索",
+          "setupTips": "绳索调至面部高度，拉向双耳两侧，外旋肩部"
+        },
+        {
+          "name": "器械辅助引体向上",
+          "weight": "218.0",
+          "sets": 4,
+          "reps": "8次",
+          "videoUrl": "https://v.douyin.com/DH3A2YpOwAk/",
+          "targetMuscle": "背阔肌",
+          "equipment": "辅助引体向上机",
+          "setupTips": "沉肩下压，背阔肌收缩带动身体上升"
+        }
+      ]
+    },
+    {
+      "categoryName": "臀腿",
+      "cue": "保持骨盆中立与核心收紧，注重离心控制与目标肌群顶峰收缩。",
+      "exercises": [
+        {
+          "name": "俯卧腿弯举",
+          "weight": "33.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/yN6A2QfDq2c/",
+          "targetMuscle": "腘绳肌/大腿后侧",
+          "equipment": "俯卧腿弯举机",
+          "setupTips": "骨盆贴紧垫面，小腿弯举至顶峰挤压腘绳肌"
+        },
+        {
+          "name": "坐姿髋外展",
+          "weight": "33.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/vk1qqsOxOY4/",
+          "targetMuscle": "臀中肌",
+          "equipment": "坐姿髋外展机",
+          "setupTips": "坐直，保持骨盆稳定，控制打开和回程"
+        },
+        {
+          "name": "史密斯机臀推",
+          "weight": "2.5",
+          "sets": 4,
+          "reps": "8次",
+          "videoUrl": "https://v.douyin.com/nbKtVlEt7cg/",
+          "targetMuscle": "臀大肌",
+          "equipment": "史密斯机 + 卧推凳",
+          "setupTips": "肩胛骨下沿卡在凳边，脚跟发力顶髋至水平"
+        },
+        {
+          "name": "宽距倒蹬",
+          "weight": "空杆",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/WDKig4ZsKaQ/",
+          "targetMuscle": "臀大肌 + 大腿",
+          "equipment": "45度倒蹬机",
+          "setupTips": "双脚置于踏板上方宽距，下放至膝角90度"
+        },
+        {
+          "name": "坐姿髋内收",
+          "weight": "12.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/FBY3osmBC9I/",
+          "targetMuscle": "大腿内收肌群",
+          "equipment": "坐姿髋内收机",
+          "setupTips": "背部贴紧靠背，大腿内侧发力平稳夹紧"
+        },
+        {
+          "name": "小腿拉伸",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": null,
+          "targetMuscle": "小腿/足踝",
+          "equipment": "阶梯/拉伸板",
+          "setupTips": "前脚掌踩稳台阶，脚跟下沉感受小腿深层拉伸"
+        }
+      ]
+    },
+    {
+      "categoryName": "腹",
+      "cue": "卷腹时下颚微收，肋骨向下沉压向肚脐，避免脖子和腰部发力代偿。",
+      "exercises": [
+        {
+          "name": "平板支撑",
+          "weight": "",
+          "sets": 2,
+          "reps": "40s",
+          "videoUrl": "https://v.douyin.com/RXXOMPI7yqw/",
+          "targetMuscle": "核心/腹直肌",
+          "equipment": "瑜伽垫",
+          "setupTips": "身体呈一条直线，腹部收紧，不塌腰不弓背"
+        },
+        {
+          "name": "卷腹机",
+          "weight": "",
+          "sets": 4,
+          "reps": "8次",
+          "videoUrl": "https://v.douyin.com/FCXVjWdNXk4/",
+          "targetMuscle": "腹直肌",
+          "equipment": "卷腹机",
+          "setupTips": "腹肌发力带动胸口向肚脐靠拢，缓慢回放"
+        },
+        {
+          "name": "下腹屈腿类动作",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/7bWFQ3xNc8I/",
+          "targetMuscle": "下腹/核心",
+          "equipment": "平行双杠/垫上",
+          "setupTips": "骨盆微卷向上提膝，避免大腿代偿"
+        },
+        {
+          "name": "卷腹凳",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/AOyluWxm96U/",
+          "targetMuscle": "腹直肌",
+          "equipment": "下斜卷腹凳",
+          "setupTips": "卷起时呼气收缩腹肌，下落时不完全放松"
+        }
+      ]
+    },
+    {
+      "categoryName": "胸",
+      "cue": "练胸的时候就想象胸肌中间有一枚硬币，往前发力的时候要去夹住它。",
+      "exercises": [
+        {
+          "name": "坐姿器械推胸",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/-1Z-osFxNi8/",
+          "targetMuscle": "胸大肌",
+          "equipment": "坐姿推胸机",
+          "setupTips": "握把高度与胸中部齐平，沉肩挺胸向前推"
+        },
+        {
+          "name": "蝴蝶机夹胸",
+          "weight": "33.0",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": "https://v.douyin.com/5jroueXUPvQ/",
+          "targetMuscle": "胸大肌",
+          "equipment": "蝴蝶机",
+          "setupTips": "肘部微屈固定角度，向中间挤压胸肌中缝"
+        },
+        {
+          "name": "史密斯机上斜推胸",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": null,
+          "targetMuscle": "胸大肌上部",
+          "equipment": "史密斯机 + 30度上斜凳",
+          "setupTips": "靠背调至30-45度，杠铃落于锁骨正下方"
+        }
+      ]
+    },
+    {
+      "categoryName": "肩",
+      "cue": "肩部训练全程沉肩，不要耸肩借力上斜方肌，小重量多次数雕刻线条。",
+      "exercises": [
+        {
+          "name": "坐姿器械推举",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": null,
+          "targetMuscle": "三角肌",
+          "equipment": "坐姿肩推机",
+          "setupTips": "核心收紧，垂直向上推举至手臂微屈"
+        },
+        {
+          "name": "哑铃侧平举",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": null,
+          "targetMuscle": "三角肌中束",
+          "equipment": "哑铃",
+          "setupTips": "肘关节微屈，肘部带动小臂向上抬至与肩平"
+        },
+        {
+          "name": "蝴蝶机反向飞鸟",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": null,
+          "targetMuscle": "三角肌后束",
+          "equipment": "蝴蝶机反向",
+          "setupTips": "调整座椅使握把与肩同高，沉肩向后水平展开"
+        },
+        {
+          "name": "龙门架面拉",
+          "weight": "",
+          "sets": 4,
+          "reps": "12次",
+          "videoUrl": null,
+          "targetMuscle": "三角肌后束 + 肩胛稳定区域",
+          "equipment": "龙门架绳索",
+          "setupTips": "保持肘高过手腕，拉向面部并外旋肩膀"
+        }
+      ]
+    }
+  ]
+}

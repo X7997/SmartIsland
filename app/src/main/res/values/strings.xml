@@ -129,8 +129,12 @@
     <string name="shizuku_not_running">Shizuku is not running or permission not granted</string>
     <string name="shizuku_success">Permissions granted via Shizuku</string>
     <string name="shizuku_failed">Shizuku setup failed: %1$s</string>
-    <string name="perm_accessibility_title">Accessibility Overlay</string>
+    <string name="perm_accessibility_title">System Overlay Permission</string>
     <string name="perm_accessibility_desc">Allows Smart Island to float dynamically above the status bar and notch area</string>
+    <string name="perm_accessibility_service_title">Accessibility Service (Topmost 2400 Layer)</string>
+    <string name="perm_accessibility_service_desc">Locks 2400 layer above status bar to ensure 100% reliable swipe and tap gestures</string>
+    <string name="perm_overlay_title">Display Over Other Apps</string>
+    <string name="perm_overlay_desc">Allows Smart Island overlay to appear over other active applications</string>
     <string name="perm_notification_title">Notification Access</string>
     <string name="perm_notification_desc">Reads incoming messages, calls, media metadata, and live tracking alerts</string>
     <string name="perm_battery_title">Battery Optimization Bypass</string>
