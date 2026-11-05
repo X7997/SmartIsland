@@ -123,6 +123,9 @@
     <string name="detail_title_permissions_center">Permissions &amp; Setup Center</string>
     <string name="detail_title_about_app">About Smart Island</string>
     <string name="detail_title_support_community">Support &amp; Feedback</string>
+    <string name="detail_title_lifecycle_guide">Background &amp; Lifecycle Guide</string>
+    <string name="card_lifecycle_guide_title">Background Persistence &amp; Lifecycle</string>
+    <string name="card_lifecycle_guide_desc">Learn about clean exit on swipe, locking in recents, autostart, and battery saver</string>
 
     <!-- Permissions Section -->
     <string name="shizuku_card_title">Shizuku 1-Tap Auto Setup</string>

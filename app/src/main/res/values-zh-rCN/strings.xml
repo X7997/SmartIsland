@@ -123,6 +123,9 @@
     <string name="detail_title_permissions_center">权限与配置中心</string>
     <string name="detail_title_about_app">关于 Smart Island</string>
     <string name="detail_title_support_community">支持与反馈</string>
+    <string name="detail_title_lifecycle_guide">后台常驻与生命周期指南</string>
+    <string name="card_lifecycle_guide_title">后台常驻与绿色生命周期</string>
+    <string name="card_lifecycle_guide_desc">查看用完即走与常驻加锁指引、自启动及电池省电优化</string>
 
     <!-- Permissions Section -->
     <string name="shizuku_card_title">Shizuku 一键自动配置</string>

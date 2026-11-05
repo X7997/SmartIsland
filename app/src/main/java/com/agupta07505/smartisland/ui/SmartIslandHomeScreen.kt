@@ -112,9 +112,11 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -178,6 +180,7 @@ private enum class FeatureDetailSection {
     ColorStudio,
     GesturesGuide,
     PermissionsCenter,
+    LifecycleGuide,
     AboutApp,
     SupportCommunity
 }
@@ -268,9 +271,6 @@ fun SmartIslandHomeScreen(
     var activeDetailSection by remember { mutableStateOf<FeatureDetailSection?>(null) }
     var transitionDirection by remember { mutableStateOf(1) } // 1 = forward, -1 = backward
 
-    // Active preview mode for interactive live preview
-    var previewMode by remember { mutableStateOf(IslandMode.Music) }
-
     val canEnable = (overlayGranted || accessibilityGranted) && notificationGranted && batteryIgnored
 
     BackHandler(enabled = activeDetailSection != null) {
@@ -316,14 +316,23 @@ fun SmartIslandHomeScreen(
                             start = 20.dp,
                             end = 20.dp,
                             top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp,
-                            bottom = 32.dp
+                            bottom = 24.dp
                         ),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Studio Top Header
+                    // Studio Top Header (集成总开关与健康状态微光胶囊，消除层级冗余)
                     StudioTopHeader(
                         isIslandEnabled = settings.enabled,
                         canEnable = canEnable,
+                        onCheckedChange = { turnOn ->
+                            if (turnOn) {
+                                com.agupta07505.smartisland.service.SmartIslandOverlayService.wakeUpOverlaySession(context)
+                                SystemServiceRecovery.requestRecovery(context)
+                            } else {
+                                com.agupta07505.smartisland.service.SmartIslandOverlayService.stopOverlaySessionFromUser(context)
+                            }
+                            scope.launch { resolvedRepository.setEnabled(turnOn) }
+                        },
                         onHealthClick = {
                             transitionDirection = 1
                             activeDetailSection = FeatureDetailSection.PermissionsCenter
@@ -332,32 +341,10 @@ fun SmartIslandHomeScreen(
 
                     when (selectedTab) {
                         StudioTab.Workout -> {
-                            // 1. Master Power Switch Card (主开关与状态)
-                            MasterPowerCard(
-                                enabled = settings.enabled,
-                                canEnable = canEnable,
-                                onCheckedChange = { turnOn ->
-                                    if (turnOn) {
-                                        com.agupta07505.smartisland.service.SmartIslandOverlayService.wakeUpOverlaySession(context)
-                                        SystemServiceRecovery.requestRecovery(context)
-                                    } else {
-                                        com.agupta07505.smartisland.service.SmartIslandOverlayService.stopOverlaySessionFromUser(context)
-                                    }
-                                    scope.launch { resolvedRepository.setEnabled(turnOn) }
-                                },
-                                onSetupPermissionsClick = {
-                                    transitionDirection = 1
-                                    activeDetailSection = FeatureDetailSection.PermissionsCenter
-                                }
-                            )
-
-                            // 2. Fitness Companion Mode Card (举铁伴侣核心训练卡片)
+                            // 举铁伴侣核心训练卡片（无干扰 Hero 级第一视觉焦点）
                             FitnessCompanionCard(
                                 onNavigateToNutrition = { selectedTab = StudioTab.Nutrition }
                             )
-
-                            // 3. Keep-Alive & Anti-Kill Guide Card (后台保活说明)
-                            KeepAliveProtectionCard()
                         }
 
                         StudioTab.Nutrition -> {
@@ -378,18 +365,6 @@ fun SmartIslandHomeScreen(
                                 }
                             )
                         }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.made_by),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
                     }
                 }
             } else {
@@ -422,6 +397,7 @@ fun SmartIslandHomeScreen(
 private fun StudioTopHeader(
     isIslandEnabled: Boolean,
     canEnable: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
     onHealthClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -438,349 +414,275 @@ private fun StudioTopHeader(
         }
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (appIcon != null) {
-                Image(
-                    bitmap = appIcon,
-                    contentDescription = "Smart Island Logo",
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(
-                            brush = Brush.linearGradient(
-                                listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("SI", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
-            }
-            Column {
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.app_subtitle),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // Live Health Status Badge
-        val statusColor = when {
-            !canEnable -> Color(0xFFE88C25) // Action required
-            isIslandEnabled -> Color(0xFF0F9F6E) // Active
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) // Ready/Off
-        }
-        val statusText = when {
-            !canEnable -> stringResource(R.string.status_setup_needed)
-            isIslandEnabled -> stringResource(R.string.status_active)
-            else -> stringResource(R.string.status_ready)
-        }
-
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(statusColor.copy(alpha = 0.12f))
-                .border(1.dp, statusColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
-                .clickable(onClick = onHealthClick)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(statusColor, CircleShape)
-                )
-                Text(
-                    text = statusText,
-                    color = statusColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
+    val statusColor = when {
+        !canEnable -> Color(0xFFE88C25)
+        isIslandEnabled -> Color(0xFF0F9F6E)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
     }
-}
+    val statusText = when {
+        !canEnable -> stringResource(R.string.status_setup_needed)
+        isIslandEnabled -> stringResource(R.string.status_active)
+        else -> stringResource(R.string.status_ready)
+    }
 
-@Composable
-private fun MasterPowerCard(
-    enabled: Boolean,
-    canEnable: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    onSetupPermissionsClick: () -> Unit
-) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                if (enabled) MaterialTheme.colorScheme.primaryContainer
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.FlashOn,
-                            contentDescription = null,
-                            tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = stringResource(R.string.master_switch_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = if (canEnable) {
-                                if (enabled) stringResource(R.string.master_switch_active_desc)
-                                else stringResource(R.string.master_switch_ready_desc)
-                            } else stringResource(R.string.master_switch_missing_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Switch(
-                    checked = enabled,
-                    enabled = canEnable || enabled,
-                    onCheckedChange = onCheckedChange
-                )
-            }
-
-            if (!canEnable) {
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                    thickness = 1.dp
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onSetupPermissionsClick)
-                        .background(Color(0xFFE88C25).copy(alpha = 0.08f))
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            Icons.Rounded.Warning,
-                            contentDescription = null,
-                            tint = Color(0xFFE88C25),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.btn_grant_required_permissions),
-                            color = Color(0xFFE88C25),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun KeepAliveProtectionCard() {
-    val context = LocalContext.current
-    var isExpanded by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        shadowElevation = 1.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { isExpanded = !isExpanded },
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF3B82F6).copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Shield,
-                            contentDescription = null,
-                            tint = Color(0xFF3B82F6),
-                            modifier = Modifier.size(20.dp)
+                    if (appIcon != null) {
+                        Image(
+                            bitmap = appIcon,
+                            contentDescription = "Smart Island Logo",
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
                         )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("SI", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
                     }
                     Column {
                         Text(
-                            text = "🛡️ 绿色生命周期与后台启停说明",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "在后台时伴随运行 · 清除后台即刻彻底销毁退出 · 0% CPU 占用与隐私安全",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = if (isIslandEnabled) "悬浮窗已就绪 · 全天候伴随" else "主开关已关闭 · 点击右侧开启",
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp
                         )
                     }
                 }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 状态徽标微光药丸 (可点击进入权限中心)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(statusColor.copy(alpha = 0.12f))
+                            .border(1.dp, statusColor.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                            .clickable(onClick = onHealthClick)
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(modifier = Modifier.size(6.dp).background(statusColor, CircleShape))
+                            Text(
+                                text = statusText,
+                                color = statusColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // 灵动岛主悬浮总开关
+                    Switch(
+                        checked = isIslandEnabled,
+                        enabled = canEnable || isIslandEnabled,
+                        onCheckedChange = onCheckedChange
+                    )
+                }
+            }
+
+            // 仅在缺少必要权限时展示醒目修复横条，权限正常时不占空间
+            if (!canEnable) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFE88C25).copy(alpha = 0.12f))
+                        .border(1.dp, Color(0xFFE88C25).copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                        .clickable(onClick = onHealthClick)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFE88C25),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "需完成悬浮窗与无障碍服务授权",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Text(
+                        text = "立即排查 →",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE88C25)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LifecycleGuideSection() {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF3B82F6).copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFF3B82F6),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = "🛡️ 绿色生命周期与后台启停指南",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "后台伴随运行 · 清除后台彻底销毁退出 · 0% CPU 占用",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+            Text(
+                text = "💡 绿色设计理念（随退随止 · 零暗中监控）：\n\n" +
+                        "• 【在后台时启动】：只要应用在多任务后台保留（如按 Home 键返回桌面或切换其他 App），灵动岛悬浮窗稳定伴随运行，提供健身、音乐等悬浮交互。\n\n" +
+                        "• 【清除后台即退出】：一旦您在多任务界面上划清除后台，灵动岛立即物理移除屏幕上的悬浮窗与状态栏常驻通知，彻底释放 CPU 与内存，完全不留后台监控，切实保护您的隐私与信息安全！\n\n" +
+                        "• 【配置永久保存】：下次点击 App 图标秒级恢复，您的挖孔位置、宽度、健身计划等所有自定义配置已由本地 DataStore 永久保存，绝不丢失！",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
-                    text = if (isExpanded) "收起 🔼" else "查看 🔽",
-                    color = Color(0xFF3B82F6),
+                    text = "⚙️ 两种使用模式由您决定：",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "🟢 【推荐 · 用完即走模式】：直接使用，不加锁。用完在多任务上划清除后台，灵动岛立刻完全退出，干净无残留，0% CPU 占用。",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+                Text(
+                    text = "🔒 【全天候常驻模式（可选）】：若您希望一键清理多任务时灵动岛也不退出，可在多任务界面长按卡片点击“加锁”，并开启自启动与电池无限制。",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
                 )
             }
 
-            AnimatedVisibility(visible = isExpanded) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { OemAutostartUtil.openAutostartSettings(context) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                    Text(
-                        text = "💡 绿色设计理念（随退随止 · 零暗中监控）：\n" +
-                                "• 【在后台时启动】：只要应用在多任务后台保留（如按 Home 键返回桌面或切换其他 App），灵动岛悬浮窗稳定伴随运行，提供健身、音乐等悬浮交互。\n" +
-                                "• 【清除后台即退出】：一旦您在多任务界面上划清除后台，灵动岛立即物理移除屏幕上的悬浮窗与状态栏常驻通知，彻底释放 CPU 与内存，完全不留后台监控，切实保护您的隐私与信息安全！\n" +
-                                "• 【配置永久保存】：下次点击 App 图标秒级恢复，您的挖孔位置、宽度、健身计划等所有自定义配置已由本地 DataStore 永久保存，绝不丢失！",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 16.sp
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "⚙️ 两种使用模式由您决定：",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "🟢 【推荐 · 用完即走模式】：直接使用，不加锁。用完在多任务上划清除后台，灵动岛立刻完全退出，干净无残留，0% CPU 占用。",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 15.sp
-                        )
-                        Text(
-                            text = "🔒 【全天候常驻模式（可选）】：若您希望一键清理多任务时灵动岛也不退出，可在多任务界面长按卡片点击“加锁”，并开启自启动与电池无限制。",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 15.sp
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                OemAutostartUtil.openAutostartSettings(context)
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp)
-                        ) {
-                            Text("⚡ 去设置自启动", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("⚡ 去设置自启动", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                    .setData(Uri.parse("package:${context.packageName}"))
+                            )
+                        }.onFailure {
+                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                         }
-                        OutlinedButton(
-                            onClick = {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                                            .setData(Uri.parse("package:${context.packageName}"))
-                                    )
-                                }.onFailure {
-                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp)
-                        ) {
-                            Text("🔋 电池设无限制", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    Text("🔋 电池无限制", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1104,96 +1006,136 @@ private fun FitnessCompanionCard(
                             }
                         }
 
-                        // 1. 个人动作注意事项 / 器械调节 (表格第三列总结)
-                        if (!currentExercise.setupTips.isNullOrBlank()) {
+                        // 动作要领与发力细节（可折叠式收拢，默认保持卡片紧凑整洁）
+                        val hasTips = !currentExercise.setupTips.isNullOrBlank() || !currentCategory.cue.isNullOrBlank() || !currentExercise.videoUrl.isNullOrBlank()
+                        var isTipsExpanded by remember(currentExercise.name) { mutableStateOf(false) }
+
+                        if (hasTips) {
                             HorizontalDivider(color = themeColor.copy(alpha = 0.15f))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFFF9800).copy(alpha = 0.08f))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.Top,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "📌 注意事项",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFF9800),
-                                    modifier = Modifier.padding(top = 1.dp)
-                                )
-                                Text(
-                                    text = currentExercise.setupTips,
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-
-                        // 2. 部位发力口诀
-                        if (!currentCategory.cue.isNullOrBlank() && currentCategory.cue != currentExercise.setupTips) {
-                            if (currentExercise.setupTips.isNullOrBlank()) {
-                                HorizontalDivider(color = themeColor.copy(alpha = 0.15f))
-                            }
-                            Row(
-                                verticalAlignment = Alignment.Top,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(horizontal = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Lightbulb,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFFB300),
-                                    modifier = Modifier
-                                        .size(15.dp)
-                                        .padding(top = 2.dp)
-                                )
-                                Text(
-                                    text = "发力口诀：${currentCategory.cue}",
-                                    fontSize = 12.sp,
-                                    lineHeight = 16.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        // 视频教程按钮 (若存在)
-                        if (!currentExercise.videoUrl.isNullOrBlank()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(themeColor.copy(alpha = 0.1f))
-                                    .clickable {
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(currentExercise.videoUrl)).apply {
-                                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                            }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(context, "无法唤醒视频播放", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                    .padding(vertical = 6.dp),
-                                horizontalArrangement = Arrangement.Center,
+                                    .background(themeColor.copy(alpha = 0.08f))
+                                    .clickable { isTipsExpanded = !isTipsExpanded }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Videocam,
-                                    contentDescription = null,
-                                    tint = themeColor,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Lightbulb,
+                                        contentDescription = null,
+                                        tint = themeColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "动作要领与发力细节",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = themeColor
+                                    )
+                                }
                                 Text(
-                                    text = "查看标准动作视频演示",
+                                    text = if (isTipsExpanded) "收起 ▲" else "展开 ▼",
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.Medium,
                                     color = themeColor
                                 )
+                            }
+
+                            AnimatedVisibility(visible = isTipsExpanded) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    if (!currentExercise.setupTips.isNullOrBlank()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFFFF9800).copy(alpha = 0.08f))
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.Top,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "📌 注意事项",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFFF9800),
+                                                modifier = Modifier.padding(top = 1.dp)
+                                            )
+                                            Text(
+                                                text = currentExercise.setupTips,
+                                                fontSize = 12.sp,
+                                                lineHeight = 16.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+
+                                    if (!currentCategory.cue.isNullOrBlank() && currentCategory.cue != currentExercise.setupTips) {
+                                        Row(
+                                            verticalAlignment = Alignment.Top,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier.padding(horizontal = 2.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Lightbulb,
+                                                contentDescription = null,
+                                                tint = Color(0xFFFFB300),
+                                                modifier = Modifier.size(14.dp).padding(top = 2.dp)
+                                            )
+                                            Text(
+                                                text = "发力口诀：${currentCategory.cue}",
+                                                fontSize = 12.sp,
+                                                lineHeight = 16.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    if (!currentExercise.videoUrl.isNullOrBlank()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(themeColor.copy(alpha = 0.1f))
+                                                .clickable {
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(currentExercise.videoUrl)).apply {
+                                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (_: Exception) {
+                                                        Toast.makeText(context, "无法唤醒视频播放", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                                .padding(vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Videocam,
+                                                contentDescription = null,
+                                                tint = themeColor,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "查看标准动作视频演示",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = themeColor
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1298,499 +1240,127 @@ private fun FitnessCompanionCard(
                 }
             }
 
-            // 7. 计划状态与文件导入 / 重置
-            Box(
+            // 7. 计划管理（紧凑一行，弹窗管理，消除卡片冗杂按钮）
+            var showPlanManagerDialog by remember { mutableStateOf(false) }
+
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "📋 当前健身计划数据",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = planSourceInfo,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1.1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF2563EB).copy(alpha = 0.12f))
-                        .clickable {
-                            filePickerLauncher.launch(
-                                arrayOf(
-                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    "application/vnd.ms-excel",
-                                    "application/json",
-                                    "application/octet-stream",
-                                    "*/*"
-                                )
-                            )
-                        }
-                        .padding(vertical = 10.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.FileDownload,
-                        contentDescription = null,
-                        tint = Color(0xFF2563EB),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "📂 导入计划 (.xlsx/.json)",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2563EB)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .weight(0.9f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .clickable {
-                            val result = fitnessRepo.resetToDefaultPlan()
-                            Toast.makeText(context, "已恢复内置健身计划: $result", Toast.LENGTH_SHORT).show()
-                        }
-                        .padding(vertical = 10.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "🔄 恢复内置计划",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SimulationLabCard(
-    activeMode: IslandMode,
-    onModeSelect: (IslandMode) -> Unit,
-    onClearAll: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.simulation_lab_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = stringResource(R.string.simulation_lab_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-            // Modes Grid in categorized rows
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Row 1: Media & Calls
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_music_player),
-                        icon = Icons.Rounded.MusicNote,
-                        iconTint = Color(0xFFFF6B9A),
-                        isSelected = activeMode == IslandMode.Music,
-                        onClick = { onModeSelect(IslandMode.Music) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_incoming_call),
-                        icon = Icons.Rounded.Call,
-                        iconTint = Color(0xFF22C55E),
-                        isSelected = activeMode == IslandMode.IncomingCall,
-                        onClick = { onModeSelect(IslandMode.IncomingCall) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Row 2: Notifications & Power
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_notification),
-                        icon = Icons.Rounded.Notifications,
-                        iconTint = Color(0xFF38BDF8),
-                        isSelected = activeMode == IslandMode.Notification,
-                        onClick = { onModeSelect(IslandMode.Notification) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_battery_charge),
-                        icon = Icons.Rounded.BatteryChargingFull,
-                        iconTint = Color(0xFF10B981),
-                        isSelected = activeMode == IslandMode.Battery,
-                        onClick = { onModeSelect(IslandMode.Battery) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Row 3: Live Activities & Maps
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_live_activity),
-                        icon = Icons.Rounded.Navigation,
-                        iconTint = Color(0xFF8B5CF6),
-                        isSelected = activeMode == IslandMode.LiveActivity,
-                        onClick = { onModeSelect(IslandMode.LiveActivity) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_turn_navigation),
-                        icon = Icons.Rounded.Explore,
-                        iconTint = Color(0xFF10B981),
-                        isSelected = activeMode == IslandMode.Navigation,
-                        onClick = { onModeSelect(IslandMode.Navigation) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Row 4: System Tools
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_file_transfer),
-                        icon = Icons.Rounded.FileDownload,
-                        iconTint = Color(0xFF06B6D4),
-                        isSelected = activeMode == IslandMode.DownloadUpload,
-                        onClick = { onModeSelect(IslandMode.DownloadUpload) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_hotspot_share),
-                        icon = Icons.Rounded.WifiTethering,
-                        iconTint = Color(0xFFF59E0B),
-                        isSelected = activeMode == IslandMode.Hotspot,
-                        onClick = { onModeSelect(IslandMode.Hotspot) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Row 5: Hardware
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_bluetooth),
-                        icon = Icons.Rounded.BluetoothConnected,
-                        iconTint = Color(0xFF38BDF8),
-                        isSelected = activeMode == IslandMode.Bluetooth,
-                        onClick = { onModeSelect(IslandMode.Bluetooth) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_flashlight),
-                        icon = Icons.Rounded.FlashlightOn,
-                        iconTint = Color(0xFFF59E0B),
-                        isSelected = activeMode == IslandMode.Flashlight,
-                        onClick = { onModeSelect(IslandMode.Flashlight) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Row 6: Screen Recording & Timer
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_screen_recording),
-                        icon = Icons.Rounded.Videocam,
-                        iconTint = Color(0xFFEF4444),
-                        isSelected = activeMode == IslandMode.ScreenRecording,
-                        onClick = { onModeSelect(IslandMode.ScreenRecording) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_timer),
-                        icon = Icons.Rounded.HourglassBottom,
-                        iconTint = Color(0xFFF59E0B),
-                        isSelected = activeMode == IslandMode.Timer,
-                        onClick = { onModeSelect(IslandMode.Timer) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Row 7: Stopwatch & Fitness
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ModeChipButton(
-                        label = stringResource(R.string.mode_stopwatch),
-                        icon = Icons.Rounded.AvTimer,
-                        iconTint = Color(0xFF06B6D4),
-                        isSelected = activeMode == IslandMode.Stopwatch,
-                        onClick = { onModeSelect(IslandMode.Stopwatch) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ModeChipButton(
-                        label = "举铁伴侣",
-                        icon = Icons.Rounded.FitnessCenter,
-                        iconTint = Color(0xFFFF9800),
-                        isSelected = activeMode == IslandMode.Fitness,
-                        onClick = { onModeSelect(IslandMode.Fitness) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            OutlinedButton(
-                onClick = onClearAll,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-            ) {
-                Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.btn_clear_all_test_notifications), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModeChipButton(
-    label: String,
-    icon: ImageVector,
-    iconTint: Color,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (isSelected) iconTint.copy(alpha = 0.15f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-            .border(
-                1.dp,
-                if (isSelected) iconTint.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                RoundedCornerShape(14.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiagnosticsSummaryCard(
-    overlayGranted: Boolean,
-    notificationGranted: Boolean,
-    batteryIgnored: Boolean,
-    accessibilityGranted: Boolean = false,
-    onOpenDiagnostics: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpenDiagnostics),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = themeColor,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = "计划：$planSourceInfo",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(themeColor.copy(alpha = 0.12f))
+                        .clickable { showPlanManagerDialog = true }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "计划管理 ⚙️",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = themeColor
+                    )
+                }
+            }
+
+            if (showPlanManagerDialog) {
+                Dialog(onDismissRequest = { showPlanManagerDialog = false }) {
+                    Card(
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth().padding(16.dp)
                     ) {
-                        Icon(
-                            Icons.Rounded.Shield,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = stringResource(R.string.system_diagnostics_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = stringResource(R.string.system_diagnostics_desc),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Text(
+                                text = "📋 健身动作计划管理",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "当前载入：$planSourceInfo\n支持导入自定义训练动作分化，或随时恢复系统内置标准计划。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            Button(
+                                onClick = {
+                                    showPlanManagerDialog = false
+                                    filePickerLauncher.launch(
+                                        arrayOf(
+                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                            "application/vnd.ms-excel",
+                                            "application/json",
+                                            "application/octet-stream",
+                                            "*/*"
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                            ) {
+                                Icon(Icons.Rounded.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("导入专属动作计划 (.xlsx / .json)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val result = fitnessRepo.resetToDefaultPlan()
+                                    Toast.makeText(context, "已恢复内置经典健身计划: $result", Toast.LENGTH_SHORT).show()
+                                    showPlanManagerDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("恢复内置经典计划", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            }
+                            TextButton(
+                                onClick = { showPlanManagerDialog = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("关闭", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
-                Icon(
-                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatusBadgePill(
-                    label = stringResource(R.string.diag_accessibility),
-                    isGranted = accessibilityGranted,
-                    modifier = Modifier.weight(1f)
-                )
-                StatusBadgePill(
-                    label = stringResource(R.string.perm_overlay_title),
-                    isGranted = overlayGranted,
-                    modifier = Modifier.weight(1f)
-                )
-                StatusBadgePill(
-                    label = stringResource(R.string.diag_notifications),
-                    isGranted = notificationGranted,
-                    modifier = Modifier.weight(1f)
-                )
-                StatusBadgePill(
-                    label = stringResource(R.string.diag_battery_saver),
-                    isGranted = batteryIgnored,
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
     }
 }
 
-@Composable
-private fun StatusBadgePill(
-    label: String,
-    isGranted: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val color = if (isGranted) Color(0xFF0F9F6E) else Color(0xFFE88C25)
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(color.copy(alpha = 0.1f))
-            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-            .padding(vertical = 6.dp, horizontal = 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(modifier = Modifier.size(6.dp).background(color, CircleShape))
-            Text(
-                text = label,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-    }
-}
+
 
 @Composable
 private fun SettingsOverviewSection(
@@ -1891,6 +1461,15 @@ private fun SettingsOverviewSection(
                 statusText = if (canEnable) stringResource(R.string.card_permissions_setup_status_all) else stringResource(R.string.status_action_required),
                 statusColor = if (canEnable) Color(0xFF0F9F6E) else Color(0xFFE88C25),
                 onClick = { onNavigateTo(FeatureDetailSection.PermissionsCenter) }
+            )
+
+            FeatureStudioNavigationCard(
+                title = stringResource(R.string.card_lifecycle_guide_title),
+                subtitle = stringResource(R.string.card_lifecycle_guide_desc),
+                icon = Icons.Rounded.Shield,
+                iconColor = Color(0xFF3B82F6),
+                statusText = "查看指南 →",
+                onClick = { onNavigateTo(FeatureDetailSection.LifecycleGuide) }
             )
         }
 
@@ -2020,46 +1599,59 @@ private fun StudioBottomNavigationBar(
     selectedTab: StudioTab,
     onTabSelected: (StudioTab) -> Unit
 ) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+        shadowElevation = 8.dp
     ) {
-        // 第一项：主训练页
-        NavigationBarItem(
-            selected = selectedTab == StudioTab.Workout,
-            onClick = { onTabSelected(StudioTab.Workout) },
-            icon = { Icon(Icons.Rounded.FitnessCenter, contentDescription = stringResource(R.string.tab_workout)) },
-            label = { Text(stringResource(R.string.tab_workout), fontWeight = FontWeight.SemiBold) },
-            colors = NavigationBarItemDefaults.colors(
-                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                selectedIconColor = MaterialTheme.colorScheme.primary,
-                selectedTextColor = MaterialTheme.colorScheme.primary
+        NavigationBar(
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp
+        ) {
+            // 第一项：主训练页
+            NavigationBarItem(
+                selected = selectedTab == StudioTab.Workout,
+                onClick = { onTabSelected(StudioTab.Workout) },
+                icon = { Icon(Icons.Rounded.FitnessCenter, contentDescription = stringResource(R.string.tab_workout)) },
+                label = { Text(stringResource(R.string.tab_workout), fontWeight = if (selectedTab == StudioTab.Workout) FontWeight.Bold else FontWeight.Normal) },
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             )
-        )
-        // 第二项：每周计划和每日喝什么
-        NavigationBarItem(
-            selected = selectedTab == StudioTab.Nutrition,
-            onClick = { onTabSelected(StudioTab.Nutrition) },
-            icon = { Icon(Icons.Rounded.LocalDining, contentDescription = stringResource(R.string.tab_nutrition_plan)) },
-            label = { Text(stringResource(R.string.tab_nutrition_plan), fontWeight = FontWeight.SemiBold) },
-            colors = NavigationBarItemDefaults.colors(
-                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                selectedIconColor = MaterialTheme.colorScheme.primary,
-                selectedTextColor = MaterialTheme.colorScheme.primary
+            // 第二项：每周计划和每日喝什么
+            NavigationBarItem(
+                selected = selectedTab == StudioTab.Nutrition,
+                onClick = { onTabSelected(StudioTab.Nutrition) },
+                icon = { Icon(Icons.Rounded.LocalDining, contentDescription = stringResource(R.string.tab_nutrition_plan)) },
+                label = { Text(stringResource(R.string.tab_nutrition_plan), fontWeight = if (selectedTab == StudioTab.Nutrition) FontWeight.Bold else FontWeight.Normal) },
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = Color(0xFF10B981).copy(alpha = 0.15f),
+                    selectedIconColor = Color(0xFF10B981),
+                    selectedTextColor = Color(0xFF10B981),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             )
-        )
-        // 第三项：设置
-        NavigationBarItem(
-            selected = selectedTab == StudioTab.Settings,
-            onClick = { onTabSelected(StudioTab.Settings) },
-            icon = { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.tab_settings)) },
-            label = { Text(stringResource(R.string.tab_settings), fontWeight = FontWeight.SemiBold) },
-            colors = NavigationBarItemDefaults.colors(
-                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                selectedIconColor = MaterialTheme.colorScheme.primary,
-                selectedTextColor = MaterialTheme.colorScheme.primary
+            // 第三项：设置
+            NavigationBarItem(
+                selected = selectedTab == StudioTab.Settings,
+                onClick = { onTabSelected(StudioTab.Settings) },
+                icon = { Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.tab_settings)) },
+                label = { Text(stringResource(R.string.tab_settings), fontWeight = if (selectedTab == StudioTab.Settings) FontWeight.Bold else FontWeight.Normal) },
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             )
-        )
+        }
     }
 }
 
@@ -2123,6 +1715,7 @@ private fun DetailScreenHost(
                 FeatureDetailSection.ColorStudio -> stringResource(R.string.detail_title_color_studio)
                 FeatureDetailSection.GesturesGuide -> stringResource(R.string.detail_title_gestures_guide)
                 FeatureDetailSection.PermissionsCenter -> stringResource(R.string.detail_title_permissions_center)
+                FeatureDetailSection.LifecycleGuide -> stringResource(R.string.detail_title_lifecycle_guide)
                 FeatureDetailSection.AboutApp -> stringResource(R.string.detail_title_about_app)
                 FeatureDetailSection.SupportCommunity -> stringResource(R.string.detail_title_support_community)
             }
@@ -2210,6 +1803,9 @@ private fun DetailScreenHost(
             }
             FeatureDetailSection.AboutApp -> {
                 AboutSection(settings = settings, repository = repository)
+            }
+            FeatureDetailSection.LifecycleGuide -> {
+                LifecycleGuideSection()
             }
             FeatureDetailSection.SupportCommunity -> {
                 SupportSection()
