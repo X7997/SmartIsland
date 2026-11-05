@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import java.io.File
+import kotlin.math.roundToInt
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -213,8 +214,8 @@ fun NutritionScreen(
     if (pendingProductResult != null) {
         ScanResultDialog(
             product = pendingProductResult!!,
-            onConfirm = {
-                nutritionRepository.addProductRecord(pendingProductResult!!)
+            onConfirm = { updatedProduct ->
+                nutritionRepository.addProductRecord(updatedProduct)
                 nutritionRepository.clearPendingResult()
                 Toast.makeText(context, "已成功存入今日饮食记录！", Toast.LENGTH_SHORT).show()
             },
@@ -983,14 +984,41 @@ private fun IntelligentFallbackDialog(
 }
 
 /**
- * AI 识图结果详情确认弹窗
+ * AI 识图结果详情确认弹窗 (支持规格容量智能动态换算，消除拍照含糖量偏差疑惑)
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ScanResultDialog(
     product: ScannedProductInfo,
-    onConfirm: () -> Unit,
+    onConfirm: (ScannedProductInfo) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // 允许用户直接在弹窗中实时切换/微调饮品规格容量
+    var selectedCapacity by remember(product) { mutableIntStateOf(product.bottleCapacityMl) }
+
+    // 动态根据所选容量重算整瓶糖分与热量
+    val factor = selectedCapacity / 100.0
+    val dynamicSugar = if (product.servingSize.startsWith("每份")) {
+        product.totalSugarG
+    } else {
+        (product.sugarPer100 * factor * 10.0).roundToInt() / 10.0
+    }
+    val dynamicKcal = if (product.servingSize.startsWith("每份")) {
+        product.totalEnergyKcal
+    } else {
+        (product.energyKcalPer100 * factor * 10.0).roundToInt() / 10.0
+    }
+    val dynamicExceeded = dynamicSugar > 25.0
+
+    val updatedProduct = product.copy(
+        bottleCapacityMl = selectedCapacity,
+        totalSugarG = dynamicSugar,
+        totalEnergyKcal = dynamicKcal,
+        isSugarExceeded = dynamicExceeded
+    )
+
+    val capacityPresets = listOf(250, 330, 450, 500, 1000)
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1009,8 +1037,78 @@ private fun ScanResultDialog(
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // 客观标定值（基准指标，永远恒定）
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "🔬 标定基准(${product.servingSize})：糖 ${product.sugarPer100}g · 能量 ${product.energyKcalPer100}kcal · 钠 ${product.sodiumMgPer100}mg",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // 规格容量选择组（消除因没拍到净含量产生的计算偏差）
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "饮用规格（点击可切换）：",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${selectedCapacity} mL",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        capacityPresets.forEach { cap ->
+                            val isSelected = selectedCapacity == cap
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { selectedCapacity = cap }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "${cap}mL",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 整瓶摄入指标（动态实时计算）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1024,7 +1122,7 @@ private fun ScanResultDialog(
                     ) {
                         Column {
                             Text("整瓶总热量", fontSize = 10.sp, color = Color(0xFFB45309))
-                            Text("${product.totalEnergyKcal} kcal", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
+                            Text("${dynamicKcal} kcal", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
                         }
                     }
 
@@ -1033,19 +1131,19 @@ private fun ScanResultDialog(
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(
-                                if (product.isSugarExceeded) Color(0xFFEF4444).copy(alpha = 0.15f)
+                                if (dynamicExceeded) Color(0xFFEF4444).copy(alpha = 0.15f)
                                 else Color(0xFF10B981).copy(alpha = 0.15f)
                             )
                             .padding(8.dp)
                     ) {
                         Column {
-                            Text("整瓶含糖", fontSize = 10.sp, color = if (product.isSugarExceeded) Color(0xFFDC2626) else Color(0xFF047857))
-                            Text("${product.totalSugarG} g", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (product.isSugarExceeded) Color(0xFFDC2626) else Color(0xFF059669))
+                            Text("整瓶含糖", fontSize = 10.sp, color = if (dynamicExceeded) Color(0xFFDC2626) else Color(0xFF047857))
+                            Text("${dynamicSugar} g", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (dynamicExceeded) Color(0xFFDC2626) else Color(0xFF059669))
                         }
                     }
                 }
 
-                if (product.isSugarExceeded) {
+                if (dynamicExceeded) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1054,7 +1152,7 @@ private fun ScanResultDialog(
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = "⚠️ 整瓶含糖已超标 (${product.totalSugarG}g > 25g 推荐线)",
+                            text = "⚠️ 整瓶含糖已超标 (${dynamicSugar}g > 25g 推荐线)",
                             color = Color(0xFFDC2626),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -1082,7 +1180,7 @@ private fun ScanResultDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onConfirm, shape = RoundedCornerShape(10.dp)) {
+            Button(onClick = { onConfirm(updatedProduct) }, shape = RoundedCornerShape(10.dp)) {
                 Text("存入记录")
             }
         },
