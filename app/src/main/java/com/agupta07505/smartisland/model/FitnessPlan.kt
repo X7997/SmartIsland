@@ -23,6 +23,7 @@ data class WorkoutPlan(
 
 data class FitnessSessionState(
     val isActive: Boolean = false,
+    val isCompleted: Boolean = false,
     val categoryName: String = "",
     val cue: String? = null,
     val currentExerciseIndex: Int = 0,

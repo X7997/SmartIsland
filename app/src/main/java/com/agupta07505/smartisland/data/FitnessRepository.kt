@@ -34,12 +34,14 @@ import javax.inject.Singleton
 @Singleton
 class FitnessRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val notificationRepository: INotificationRepository
+    private val notificationRepository: INotificationRepository,
+    private val nutritionRepository: com.agupta07505.smartisland.data.nutrition.NutritionRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var restTimerJob: Job? = null
     private var exerciseTimerJob: Job? = null
     private var setTimerJob: Job? = null
+    private var sessionStartTimeMillis: Long = 0L
 
     private val _plan = MutableStateFlow<WorkoutPlan>(WorkoutPlan())
     val plan: StateFlow<WorkoutPlan> = _plan.asStateFlow()
@@ -223,10 +225,12 @@ class FitnessRepository @Inject constructor(
 
         val initialExercise = category.exercises.firstOrNull()
         val duration = getExerciseDurationSeconds(initialExercise)
+        sessionStartTimeMillis = System.currentTimeMillis()
 
         _sessionState.update {
             FitnessSessionState(
                 isActive = true,
+                isCompleted = false,
                 categoryName = category.categoryName,
                 cue = category.cue,
                 currentExerciseIndex = 0,
@@ -252,10 +256,11 @@ class FitnessRepository @Inject constructor(
     }
 
     fun stopWorkout() {
+        sessionStartTimeMillis = 0L
         cancelRestTimer()
         cancelExerciseTimer()
         cancelSetTimer()
-        _sessionState.update { it.copy(isActive = false, isResting = false, exerciseSecondsRemaining = 0, setElapsedSeconds = 0) }
+        _sessionState.update { it.copy(isActive = false, isCompleted = false, isResting = false, exerciseSecondsRemaining = 0, setElapsedSeconds = 0) }
         notificationRepository.removeNotification(FITNESS_NOTIFICATION_KEY)
     }
 
@@ -345,15 +350,33 @@ class FitnessRepository @Inject constructor(
                 // Completed all exercises for today!
                 cancelExerciseTimer()
                 cancelSetTimer()
+                val elapsedSeconds = if (sessionStartTimeMillis > 0) {
+                    ((System.currentTimeMillis() - sessionStartTimeMillis) / 1000).toInt()
+                } else 0
+                val totalSetsCount = category.exercises.sumOf { it.sets }
+
+                // 核心需求：最后一组休息结束后，默认训练圆满结束，自动留档并点亮本周训练图对应部位
+                nutritionRepository.archiveWorkoutSession(
+                    categoryName = category.categoryName,
+                    durationSeconds = elapsedSeconds,
+                    totalSets = totalSetsCount,
+                    summary = "完成 ${category.categoryName} 训练 · 共 ${category.exercises.size} 个动作，${totalSetsCount} 组"
+                )
+
+                sessionStartTimeMillis = 0L
                 _sessionState.update {
                     it.copy(
+                        isActive = false,
+                        isCompleted = true,
                         isResting = false,
                         restSecondsRemaining = 0,
                         exerciseSecondsRemaining = 0,
                         setElapsedSeconds = 0
                     )
                 }
-                updateIslandNotification()
+
+                // 核心需求 1：自动结束训练并立即移除健身通知，灵动岛彻底回归正常状态（自动识别网易云等活跃媒体）
+                notificationRepository.removeNotification(FITNESS_NOTIFICATION_KEY)
                 if (vibrateOnCompletion) triggerCompletionVibration()
             }
         }

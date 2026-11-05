@@ -16,7 +16,10 @@
     <string name="made_by">由 Animesh Gupta 用 ❤️ 制作</string>
 
     <!-- Navigation Tabs -->
+    <string name="tab_workout">主训练页</string>
+    <string name="tab_nutrition_plan">计划与饮品</string>
     <string name="tab_studio">工作室</string>
+    <string name="tab_nutrition">摄入与营养</string>
     <string name="tab_position">挖孔与布局</string>
     <string name="tab_settings">设置</string>
     <string name="tab_features">功能</string>

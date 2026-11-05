@@ -80,6 +80,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HourglassBottom
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.LocalDining
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Notifications
@@ -93,7 +94,7 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.WifiTethering
-import com.agupta07505.smartisland.ui.components.FemaleMuscleAnatomyDualView
+import com.agupta07505.smartisland.ui.components.GymMuscleAnatomyDualView
 import com.agupta07505.smartisland.ui.components.MuscleMatcher
 import com.agupta07505.smartisland.ui.components.TargetMuscle
 import com.agupta07505.smartisland.ui.components.MuscleCategory
@@ -164,12 +165,13 @@ import com.agupta07505.smartisland.util.runCatchingLogged
 import kotlinx.coroutines.launch
 
 private enum class StudioTab {
-    Studio,
-    Position,
+    Workout,
+    Nutrition,
     Settings
 }
 
 private enum class FeatureDetailSection {
+    PositionLayout,
     NotificationRules,
     AppShortcuts,
     NotificationHistory,
@@ -200,6 +202,13 @@ fun SmartIslandHomeScreen(
         notificationRepository ?: runCatching {
             SmartIslandRepositories.notificationRepository(context)
         }.getOrNull()
+    }
+    val resolvedNutritionRepository = remember(context) {
+        runCatching {
+            SmartIslandRepositories.nutritionRepository(context)
+        }.getOrElse {
+            com.agupta07505.smartisland.data.nutrition.NutritionRepository(context.applicationContext)
+        }
     }
 
     val settings by resolvedRepository.settings.collectAsStateWithLifecycle(initialValue = SmartIslandSettings.Default)
@@ -255,7 +264,7 @@ fun SmartIslandHomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    var selectedTab by remember { mutableStateOf(StudioTab.Studio) }
+    var selectedTab by remember { mutableStateOf(StudioTab.Workout) }
     var activeDetailSection by remember { mutableStateOf<FeatureDetailSection?>(null) }
     var transitionDirection by remember { mutableStateOf(1) } // 1 = forward, -1 = backward
 
@@ -322,8 +331,8 @@ fun SmartIslandHomeScreen(
                     )
 
                     when (selectedTab) {
-                        StudioTab.Studio -> {
-                            // 1. Master Power Switch Card
+                        StudioTab.Workout -> {
+                            // 1. Master Power Switch Card (主开关与状态)
                             MasterPowerCard(
                                 enabled = settings.enabled,
                                 canEnable = canEnable,
@@ -342,42 +351,18 @@ fun SmartIslandHomeScreen(
                                 }
                             )
 
-                            // 2. Keep-Alive & Anti-Kill Guide Card
+                            // 2. Fitness Companion Mode Card (举铁伴侣核心训练卡片)
+                            FitnessCompanionCard(
+                                onNavigateToNutrition = { selectedTab = StudioTab.Nutrition }
+                            )
+
+                            // 3. Keep-Alive & Anti-Kill Guide Card (后台保活说明)
                             KeepAliveProtectionCard()
-
-                            // 3. Fitness Companion Mode Card
-                            FitnessCompanionCard()
-
-                            // 3. Interactive Simulation Lab
-                            SimulationLabCard(
-                                activeMode = previewMode,
-                                onModeSelect = { mode ->
-                                    previewMode = mode
-                                    resolvedNotificationRepository?.showDemo(mode)
-                                },
-                                onClearAll = {
-                                    resolvedNotificationRepository?.clearTestNotifications()
-                                    Toast.makeText(context, context.getString(R.string.toast_cleared_test_notifications), Toast.LENGTH_SHORT).show()
-                                }
-                            )
-
-                            // 3. System Diagnostics Strip
-                            DiagnosticsSummaryCard(
-                                overlayGranted = overlayGranted,
-                                notificationGranted = notificationGranted,
-                                batteryIgnored = batteryIgnored,
-                                accessibilityGranted = accessibilityGranted,
-                                onOpenDiagnostics = {
-                                    transitionDirection = 1
-                                    activeDetailSection = FeatureDetailSection.PermissionsCenter
-                                }
-                            )
                         }
 
-                        StudioTab.Position -> {
-                            PositionsSection(
-                                settings = settings,
-                                repository = resolvedRepository
+                        StudioTab.Nutrition -> {
+                            com.agupta07505.smartisland.ui.nutrition.NutritionScreen(
+                                nutritionRepository = resolvedNutritionRepository
                             )
                         }
 
@@ -803,7 +788,9 @@ private fun KeepAliveProtectionCard() {
 }
 
 @Composable
-private fun FitnessCompanionCard() {
+private fun FitnessCompanionCard(
+    onNavigateToNutrition: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     val fitnessRepo = remember { SmartIslandRepositories.fitnessRepository(context) }
     val plan by fitnessRepo.plan.collectAsState()
@@ -859,7 +846,7 @@ private fun FitnessCompanionCard() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -877,7 +864,7 @@ private fun FitnessCompanionCard() {
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "举铁伴侣 · 肌肉与器械训练",
+                            text = "举铁伴侣 · 训练中心",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -885,10 +872,40 @@ private fun FitnessCompanionCard() {
                     }
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        text = "一眼掌握目标肌群、训练器械与组数记录",
+                        text = "目标肌群 · 训练器械 · 智能组数",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
                     )
+                }
+
+                if (onNavigateToNutrition != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFF10B981).copy(alpha = 0.12f))
+                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                            .clickable { onNavigateToNutrition() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.LocalDining,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "摄入与周图",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF059669)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -931,48 +948,15 @@ private fun FitnessCompanionCard() {
                 }
             }
 
-            // 3. Apple Health 风格：女性人体正反双面解剖肌肉点亮图
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    FemaleMuscleAnatomyDualView(
-                        activeMuscle = currentTargetMuscle,
-                        activeCategory = selectedCategory,
-                        isDarkTheme = false
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // 目标肌群中文胶囊标签
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(themeColor.copy(alpha = 0.15f))
-                                .padding(horizontal = 10.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = "目标肌群: ${currentTargetMuscle.displayName}",
-                                color = themeColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
+            // 3. 健身房器械人体正反双面解剖肌肉矢量图 (白线底图 + 灰色部位 + 红色闪烁动作)
+            GymMuscleAnatomyDualView(
+                activeMuscle = currentTargetMuscle,
+                activeCategory = selectedCategory,
+                isDarkTheme = true,
+                showLabels = true,
+                showStatusBadge = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             // 4. 动作切换小标签栏 (点击快速切换动作并联动人体肌群)
             if (currentCategory != null && currentCategory.exercises.isNotEmpty()) {
@@ -1833,6 +1817,18 @@ private fun SettingsOverviewSection(
             )
         }
 
+        // Section 0: Notch & Layout Settings (灵动岛形态与硬件适配作为二级入口)
+        SettingsCategoryGroup(title = "灵动岛形态与位置调节") {
+            FeatureStudioNavigationCard(
+                title = stringResource(R.string.tab_position),
+                subtitle = "自定义灵动岛挖孔定位、X轴偏移、尺寸与圆角",
+                icon = Icons.Rounded.Tune,
+                iconColor = Color(0xFF6366F1),
+                statusText = "参数调节 →",
+                onClick = { onNavigateTo(FeatureDetailSection.PositionLayout) }
+            )
+        }
+
         // Section 1: Island Behaviors & App Launcher
         SettingsCategoryGroup(title = stringResource(R.string.category_behaviors_launcher)) {
             FeatureStudioNavigationCard(
@@ -2028,28 +2024,31 @@ private fun StudioBottomNavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
     ) {
+        // 第一项：主训练页
         NavigationBarItem(
-            selected = selectedTab == StudioTab.Studio,
-            onClick = { onTabSelected(StudioTab.Studio) },
-            icon = { Icon(Icons.Rounded.FlashOn, contentDescription = stringResource(R.string.tab_studio)) },
-            label = { Text(stringResource(R.string.tab_studio), fontWeight = FontWeight.SemiBold) },
+            selected = selectedTab == StudioTab.Workout,
+            onClick = { onTabSelected(StudioTab.Workout) },
+            icon = { Icon(Icons.Rounded.FitnessCenter, contentDescription = stringResource(R.string.tab_workout)) },
+            label = { Text(stringResource(R.string.tab_workout), fontWeight = FontWeight.SemiBold) },
             colors = NavigationBarItemDefaults.colors(
                 indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                 selectedIconColor = MaterialTheme.colorScheme.primary,
                 selectedTextColor = MaterialTheme.colorScheme.primary
             )
         )
+        // 第二项：每周计划和每日喝什么
         NavigationBarItem(
-            selected = selectedTab == StudioTab.Position,
-            onClick = { onTabSelected(StudioTab.Position) },
-            icon = { Icon(Icons.Rounded.Tune, contentDescription = stringResource(R.string.tab_position)) },
-            label = { Text(stringResource(R.string.tab_position), fontWeight = FontWeight.SemiBold) },
+            selected = selectedTab == StudioTab.Nutrition,
+            onClick = { onTabSelected(StudioTab.Nutrition) },
+            icon = { Icon(Icons.Rounded.LocalDining, contentDescription = stringResource(R.string.tab_nutrition_plan)) },
+            label = { Text(stringResource(R.string.tab_nutrition_plan), fontWeight = FontWeight.SemiBold) },
             colors = NavigationBarItemDefaults.colors(
                 indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                 selectedIconColor = MaterialTheme.colorScheme.primary,
                 selectedTextColor = MaterialTheme.colorScheme.primary
             )
         )
+        // 第三项：设置
         NavigationBarItem(
             selected = selectedTab == StudioTab.Settings,
             onClick = { onTabSelected(StudioTab.Settings) },
@@ -2117,6 +2116,7 @@ private fun DetailScreenHost(
             }
             Spacer(modifier = Modifier.width(12.dp))
             val title = when (section) {
+                FeatureDetailSection.PositionLayout -> stringResource(R.string.tab_position)
                 FeatureDetailSection.NotificationRules -> stringResource(R.string.detail_title_notifications_privacy)
                 FeatureDetailSection.AppShortcuts -> stringResource(R.string.detail_title_app_shortcuts)
                 FeatureDetailSection.NotificationHistory -> stringResource(R.string.detail_title_notification_history)
@@ -2135,6 +2135,9 @@ private fun DetailScreenHost(
         }
 
         when (section) {
+            FeatureDetailSection.PositionLayout -> {
+                PositionsSection(settings = settings, repository = repository)
+            }
             FeatureDetailSection.NotificationRules -> {
                 NotificationsAndPrivacySection(settings = settings, repository = repository)
             }

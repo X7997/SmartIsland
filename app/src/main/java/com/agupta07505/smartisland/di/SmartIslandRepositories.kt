@@ -24,6 +24,7 @@ interface SmartIslandRepositoriesEntryPoint {
     fun notificationRepository(): INotificationRepository
     fun notificationHistoryRepository(): INotificationHistoryRepository
     fun fitnessRepository(): FitnessRepository
+    fun nutritionRepository(): com.agupta07505.smartisland.data.nutrition.NutritionRepository
 }
 
 object SmartIslandRepositories {
@@ -38,6 +39,9 @@ object SmartIslandRepositories {
 
     fun fitnessRepository(context: Context): FitnessRepository =
         entryPoint(context).fitnessRepository()
+
+    fun nutritionRepository(context: Context): com.agupta07505.smartisland.data.nutrition.NutritionRepository =
+        entryPoint(context).nutritionRepository()
 
     private fun entryPoint(context: Context): SmartIslandRepositoriesEntryPoint =
         EntryPointAccessors.fromApplication(

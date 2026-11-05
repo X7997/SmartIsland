@@ -16,7 +16,10 @@
     <string name="made_by">Made with ❤️ by Animesh Gupta</string>
 
     <!-- Navigation Tabs -->
+    <string name="tab_workout">Workout</string>
+    <string name="tab_nutrition_plan">Plan &amp; Drink</string>
     <string name="tab_studio">Studio</string>
+    <string name="tab_nutrition">Nutrition</string>
     <string name="tab_position">Notch &amp; Layout</string>
     <string name="tab_settings">Settings</string>
     <string name="tab_features">Features</string>

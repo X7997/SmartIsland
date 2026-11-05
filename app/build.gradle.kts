@@ -137,10 +137,14 @@ dependencies {
     // Hidden API bypass for Android 9 - 15
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
 
+    // Google ML Kit On-Device Chinese & English OCR (图转文)
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+
     debugImplementation(composeBom)
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     testImplementation("io.mockk:mockk:1.13.10")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
     testImplementation("app.cash.turbine:turbine:1.1.0")
@@ -150,4 +154,14 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+}
+
+tasks.withType<Test>().configureEach {
+    maxParallelForks = 1
+    jvmArgs(
+        "-XX:+EnableDynamicAgentLoading",
+        "-Djdk.attach.allowAttachSelf=true",
+        "-Xmx384m",
+        "-XX:+UseSerialGC"
+    )
 }
